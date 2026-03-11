@@ -186,52 +186,91 @@ function short(v,n){
   if(line) out.push(line);
   return out.join("\n");
 }
-function render(rows){
-  const status=countBy(rows,"status"), entity=countBy(rows,"entityType"), requester=countBy(rows,"requester"), dataType=countBy(rows,"dataType"), purpose=countBy(rows,"purpose"), region=countBy(rows,"region"), workload=countBy(rows,"turnaroundBucket");
+function render(rows,filters){
+  filters=filters||getSelectedFilters();
+  const status=countBy(rows,"status"), entity=countBy(rows,"entityType"), requester=countBy(rows,"requester"), purpose=countBy(rows,"purpose"), region=countBy(rows,"region"), departmentMap=countBy(rows,"department"), workload=countBy(rows,"turnaroundBucket");
+  const showRejectedReasons=filters.status==="مرفوض";
+  const dataTypeRows=showRejectedReasons?rows:rows.filter((r)=>!NON_DATA_TYPES.has(r.dataType));
+  const dataType=countBy(dataTypeRows,"dataType");
   const responded=rows.filter((r)=>isRespondedStatus(r.status)), delivered=rows.filter((r)=>r.status==="تم التسليم"), rejected=rows.filter((r)=>r.status==="مرفوض"), inProgress=rows.filter((r)=>r.status==="تحت الاجراء"), waitingSubmitter=rows.filter((r)=>r.status==="معلق عند مقدم الطلب");
   const valid=responded.filter((r)=>Number.isFinite(r.turnaroundDays)&&r.turnaroundDays>=0);
   const excluded=responded.length-valid.length;
   const completion=rows.length?(responded.length/rows.length):0;
-  const tr=trend(rows), topPurpose=topEntry(purpose), topRequester=topEntry(requester), topData=topEntry(dataType), topRegion=topEntry(region), topMonth=[...tr].sort((a,b)=>b.count-a.count)[0];
+  const tr=trend(rows), topPurpose=topEntry(purpose), topRequester=topEntry(requester), topData=topEntry(dataType), topRegion=topEntry(region), topDepartment=topEntry(departmentMap), topMonth=[...tr].sort((a,b)=>b.count-a.count)[0];
+  const responseMap=countByLabel(valid.map((r)=>responseBucket(r.turnaroundDays)));
   const kpis=[];
-  kpis.push(["إجمالي عدد الطلبات",fmtNum(rows.length),"عدد السجلات بعد التصفية الحالية"]);
-  kpis.push(["نسبة الإنجاز",fmtPct(completion),"يشمل الطلبات المسلمة والمرفوضة باعتبارها طلبات تم الرد عليها: "+fmtNum(responded.length)]);
-  kpis.push(["طلبات قيد المتابعة",fmtNum(inProgress.length+waitingSubmitter.length),"تحت الإجراء: "+fmtNum(inProgress.length)+" | معلقة عند مقدم الطلب: "+fmtNum(waitingSubmitter.length)]);
-  kpis.push(["متوسط المعالجة",valid.length?avg(valid.map((r)=>r.turnaroundDays)).toFixed(1)+" يوم":"غير متاح","محسوب على الطلبات التي تم الرد عليها ولها تاريخ استلام وتسليم صالحان. المستبعد: "+fmtNum(excluded)]);
-  kpis.push(["حصة الجهات الحكومية",fmtPct(rows.length?((entity.get("جهات حكومية")||0)/rows.length):0),"القناة الرئيسية للطلب الحالي"]);
-  kpis.push(["أعلى غرض",topPurpose.label,fmtNum(topPurpose.value)+" طلبًا"]);
-  kpis.push(["أكثر جهة طلبًا",topRequester.label,fmtNum(topRequester.value)+" طلبًا"]);
-  kpis.push(["أكثر نوع بيانات",topData.label,fmtNum(topData.value)+" طلبًا"]);
+  kpis.push(["إجمالي الطلبات",fmtNum(rows.length),"إجمالي السجلات ضمن التصفية الحالية."]);
+  kpis.push(["نسبة الإنجاز",fmtPct(completion),"تُحتسب على أساس الطلبات التي تم الرد عليها رسميًا: تم التسليم ("+fmtNum(delivered.length)+") + مرفوض ("+fmtNum(rejected.length)+")."]);
+  kpis.push(["طلبات قيد المتابعة",fmtNum(inProgress.length+waitingSubmitter.length),"تحت الإجراء: "+fmtNum(inProgress.length)+" | معلقة عند مقدم الطلب: "+fmtNum(waitingSubmitter.length)+"."]);
+  kpis.push(["متوسط المعالجة",valid.length?(fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يوم"):"غير متاح","محسوب على الطلبات المُجاب عليها ذات تاريخ استلام وتسليم صالحين ("+fmtNum(valid.length)+" طلبًا)، مع استبعاد "+fmtNum(excluded)+" سجلًا ناقصًا أو غير صالح."]);
+  kpis.push(["الإدارة الأعلى استقبالًا",topDepartment.label,fmtNum(topDepartment.value)+" طلبًا ضمن نطاق التصفية الحالي."]);
+  kpis.push(["الغرض الأكثر تكرارًا",topPurpose.label,fmtNum(topPurpose.value)+" طلبًا تقود هذا المسار التحليلي."]);
+  kpis.push(["أكثر جهة طلبًا",topRequester.label,fmtNum(topRequester.value)+" طلبًا من الجهة الأعلى نشاطًا."]);
+  kpis.push([showRejectedReasons?"أبرز سبب ظاهر في الرفض":"أكثر نوع بيانات طلبًا",topData.label,fmtNum(topData.value)+" طلبًا ضمن القراءة الحالية."]);
   document.getElementById("kpi-grid").innerHTML=kpis.map((k)=>"<article class=\"kpi-card\"><div class=\"kpi-label\">"+esc(k[0])+"</div><div class=\"kpi-value\">"+esc(k[1])+"</div><div class=\"kpi-note\">"+esc(k[2])+"</div></article>").join("");
   const summary=[];
-  summary.push("<div class=\"summary-item\"><strong>المشهد العام</strong><span>إجمالي "+fmtNum(rows.length)+" طلبًا، مع رد على "+fmtNum(responded.length)+" منها.</span></div>");
-  summary.push("<div class=\"summary-item\"><strong>الضغط الرئيسي</strong><span>الأكثر طلبًا: "+esc(topData.label)+"، والأكثر غرضًا: "+esc(topPurpose.label)+".</span></div>");
-  summary.push("<div class=\"summary-item\"><strong>التمركز</strong><span>أعلى جهة: "+esc(topRequester.label)+"، وأعلى محافظة: "+esc(topRegion.label)+".</span></div>");
+  summary.push("<div class=\"summary-item\"><strong>صورة الأداء التنفيذي</strong><span>تعرض اللوحة "+fmtNum(rows.length)+" طلبًا ضمن التصفية الحالية، وتمت الاستجابة رسميًا لـ "+fmtNum(responded.length)+" طلبًا بنسبة إنجاز تبلغ "+fmtPct(completion)+".</span></div>");
+  summary.push("<div class=\"summary-item\"><strong>محركات الطلب المؤسسي</strong><span>أعلى غرض ظاهر هو "+esc(topPurpose.label)+"، بينما تتصدر "+esc(topRequester.label)+" الجهات الأكثر طلبًا للبيانات خلال الفترة المحددة.</span></div>");
+  summary.push("<div class=\"summary-item\"><strong>تمركز الطلب والخدمة</strong><span>يبرز "+esc(topDepartment.label)+" كأعلى إدارة استقبالًا للطلبات، مع تمركز جغرافي أكبر في "+esc(topRegion.label)+".</span></div>");
   document.getElementById("executive-summary").innerHTML=summary.join("");
   const insights=[];
-  insights.push(["الاستجابة الرسمية","نسبة الإنجاز تحتسب الطلبات المسلمة والمرفوضة معًا لأنها تمثل طلبات تم الرد عليها."]);
-  insights.push(["المتابعة التشغيلية","الطلبات المفتوحة الحالية = تحت الإجراء ("+fmtNum(inProgress.length)+") + معلقة عند مقدم الطلب ("+fmtNum(waitingSubmitter.length)+")."]);
-  insights.push(["متوسط المعالجة","المتوسط محسوب على "+fmtNum(valid.length)+" طلبًا مكتمل التاريخ، مع استبعاد "+fmtNum(excluded)+" سجلًا غير صالح للحساب."]);
-  insights.push(["الذروة الزمنية",topMonth?"أعلى شهر هو "+esc(topMonth.label)+" بعدد "+fmtNum(topMonth.count)+" طلبًا.":"لا توجد تواريخ كافية."]);
-  insights.push(["سلامة البيانات",fmtNum(rows.filter((r)=>r.turnaroundDays<0).length)+" حالات تحتاج مراجعة بسبب تعارض أو نقص في التواريخ."]);
+  insights.push(["قراءة الإنجاز","الإنجاز التنفيذي يشمل التسليم والرفض معًا باعتبارهما استجابة رسمية للطلب، ما يمنح الإدارة قراءة أدق لحجم الطلبات المغلقة فعليًا."]);
+  insights.push(["موقف المتابعة الحالي","عدد الطلبات المفتوحة حاليًا يبلغ "+fmtNum(inProgress.length+waitingSubmitter.length)+" طلبًا، ويتركز بين تحت الإجراء ومعلق عند مقدم الطلب بما يعكس الاحتياج إلى متابعة تشغيلية مباشرة."]);
+  insights.push(["كفاءة زمن المعالجة",valid.length?("متوسط زمن المعالجة يبلغ "+fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يومًا استنادًا إلى "+fmtNum(valid.length)+" طلبًا مكتمل التواريخ."):"لا توجد طلبات مكتملة التواريخ تكفي لحساب متوسط المعالجة في نطاق التصفية الحالي."]);
+  insights.push(["إشارة الطلب الأعلى",topMonth?("سُجل أعلى نشاط زمني في "+esc(topMonth.label)+" بعدد "+fmtNum(topMonth.count)+" طلبًا، ما يجعله شهر الذروة في السلسلة الحالية."):"لا توجد تواريخ استلام كافية لإظهار شهر الذروة ضمن التصفية الحالية."]);
   document.getElementById("insights-list").innerHTML=insights.map((x)=>"<div class=\"insight-item\"><strong>"+esc(x[0])+"</strong><span>"+esc(x[1])+"</span></div>").join("");
-  const workloadOrder=["استجابة خلال 7 أيام","استجابة خلال 8-30 يومًا","استجابة بعد أكثر من 30 يومًا","طلبات مفتوحة","تواريخ أو إغلاقات ناقصة","تواريخ غير متسقة"];
+  setDataTypeHeading(showRejectedReasons);
+  const workloadOrder=["خلال 7 أيام","خلال 8-30 يومًا","أكثر من 30 يومًا"];
   plotTrend(tr);
   plotPie("status-chart",topItems(status,6).map((x)=>({name:x[0],value:x[1],itemStyle:{color:COLORS[x[0]]||"#9db4c0"}})));
-  plotBar("entity-chart",topItems(entity,10),"#2d9c8f",true,22);
-  plotBar("requesters-chart",topItems(requester,10),"#0b7285",true,24);
-  plotBar("data-types-chart",topItems(dataType,8),"#f2a65a",false,18);
-  plotBar("purpose-chart",topItems(purpose,10),"#6a9fb5",true,26);
+  plotBar("entity-chart",topItems(entity,10),"#76B67E",true,20);
+  plotBar("requesters-chart",topItems(requester,10),"#4E9363",true,24);
+  plotBar("data-types-chart",topItems(dataType,8),showRejectedReasons?"#D97757":"#89BD73",false,18);
+  plotBar("purpose-chart",topItems(purpose,10),"#6AA879",true,24);
   plotPie("regions-chart",topItems(region,8).map((x)=>({name:x[0],value:x[1]})),true);
-  plotBar("workload-chart",workloadOrder.map((name)=>[name,workload.get(name)||0]),"#2d9c8f",true,22);
+  plotBar("workload-chart",workloadOrder.map((name)=>[name,responseMap.get(name)||0]),"#5FAF7F",true,18);
 }
 function plotTrend(data){
-  charts["trend-chart"].setOption({tooltip:{trigger:"axis",confine:true,extraCssText:"max-width:360px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].axisValue+"</strong><br>عدد الطلبات: "+fmtNum(params[0].value)+"</div>"},grid:{left:24,right:24,bottom:20,containLabel:true},xAxis:{type:"category",data:data.map((x)=>x.label),axisLabel:{color:"#5c7382",rotate:28}},yAxis:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"line",smooth:true,symbolSize:8,data:data.map((x)=>x.count),lineStyle:{color:"#0b7285",width:4},itemStyle:{color:"#0b7285"},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:"rgba(11,114,133,.34)"},{offset:1,color:"rgba(11,114,133,.04)"}])}}]});
+  charts["trend-chart"].setOption({tooltip:{trigger:"axis",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].axisValue+"</strong><br>عدد الطلبات: "+fmtNum(params[0].value)+"</div>"},grid:{left:24,right:24,bottom:20,containLabel:true},xAxis:{type:"category",data:data.map((x)=>x.label),axisLabel:{color:"#5c7382",rotate:28}},yAxis:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"line",smooth:true,symbolSize:8,data:data.map((x)=>x.count),lineStyle:{color:"#0b7285",width:4},itemStyle:{color:"#0b7285"},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:"rgba(11,114,133,.34)"},{offset:1,color:"rgba(11,114,133,.04)"}])}}]});
 }
 function plotPie(id,data,rose){
-  charts[id].setOption({tooltip:{trigger:"item",confine:true,extraCssText:"max-width:360px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},legend:{bottom:0,textStyle:{color:"#5c7382"}},series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:["48%","72%"],center:["50%",rose?"50%":"44%"],label:{color:"#153243",formatter:rose?"{b}\n{c}":"{b}\n{d}%"},data:data}]});
+  charts[id].setOption({tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},legend:{bottom:0,textStyle:{color:"#5c7382"}},series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:["48%","72%"],center:["50%",rose?"50%":"44%"],label:{color:"#153243",formatter:rose?"{b}\n{c}":"{b}\n{d}%"},data:data}]});
 }
 function plotBar(id,data,color,horizontal,limit){
   const labels=data.map((x)=>limit?short(x[0],limit):x[0]), values=data.map((x)=>x[1]);
-  charts[id].setOption({tooltip:{trigger:"axis",axisPointer:{type:"shadow"},confine:true,extraCssText:"max-width:380px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].name+"</strong><br>القيمة: "+fmtNum(params[0].value)+"</div>"},grid:{top:10,left:18,right:14,bottom:horizontal?12:52,containLabel:true},xAxis:horizontal?{type:"value",axisLabel:{color:"#5c7382"}}:{type:"category",data:labels,axisLabel:{color:"#5c7382",rotate:horizontal?0:0,interval:0}},yAxis:horizontal?{type:"category",data:labels,axisLabel:{color:"#153243",interval:0}}:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"bar",data:values,itemStyle:{color:color,borderRadius:[12,12,12,12]}}]});
+  charts[id].setOption({tooltip:{trigger:"axis",axisPointer:{type:"shadow"},confine:true,extraCssText:"max-width:440px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].name+"</strong><br>القيمة: "+fmtNum(params[0].value)+"</div>"},grid:{top:10,left:18,right:14,bottom:horizontal?12:52,containLabel:true},xAxis:horizontal?{type:"value",axisLabel:{color:"#5c7382"}}:{type:"category",data:labels,axisLabel:{color:"#5c7382",rotate:horizontal?0:0,interval:0}},yAxis:horizontal?{type:"category",data:labels,axisLabel:{color:"#153243",interval:0}}:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"bar",data:values,itemStyle:{color:color,borderRadius:[12,12,12,12]}}]});
 }
+
+function bindFilters(){
+  ["filter-start-date","filter-end-date","filter-entity-type","filter-status","filter-purpose","filter-data-type","filter-department"].forEach((id)=>{
+    document.getElementById(id).addEventListener("change", applyFilters);
+  });
+  document.getElementById("reset-filters").addEventListener("click", ()=>{
+    ["filter-start-date","filter-end-date"].forEach((id)=>document.getElementById(id).value="");
+    ["filter-entity-type","filter-status","filter-purpose","filter-data-type","filter-department"].forEach((id)=>document.getElementById(id).value="الكل");
+    applyFilters();
+  });
+}
+function fillFilters(){
+  const filters=getSelectedFilters();
+  fillSelect("filter-entity-type",filterRowsState(master,filters,["entity"]).map((x)=>x.entityType));
+  fillSelect("filter-status",filterRowsState(master,filters,["status"]).map((x)=>x.status));
+  fillSelect("filter-purpose",filterRowsState(master,filters,["purpose"]).map((x)=>x.purpose));
+  fillSelect("filter-data-type",allowedDataTypes(filterRowsState(master,filters,["dataType"]),filters));
+  fillSelect("filter-department",filterRowsState(master,filters,["department"]).map((x)=>x.department));
+}
+function applyFilters(){
+  fillFilters();
+  const filters=getSelectedFilters();
+  filtered=filterRowsState(master,filters);
+  render(filtered,filters);
+}
+const NON_DATA_TYPES=new Set(["البيانات المطلوبة غير متوفرة بالإدارة","البيانات المطلوبة لاتتوفر لدى الإدارة","البيانات المطلوبة لاتتوفر لدى المركز","البيانات المطلوبة لاتتوفر لدى الإدارة حاليا","البيانات المطلوبة لاتتوفر لدى المركز حاليا","البيانات المطلوبة لاتتوفر لدى الإدارة حالياً","البيانات المطلوبة لاتتوفر لدى المركز حالياً","معلق في انتظار تحديد نوع البيانات"]);
+function responseBucket(days){if(!Number.isFinite(days)||days<0)return null;if(days<=7)return"خلال 7 أيام";if(days<=30)return"خلال 8-30 يومًا";return"أكثر من 30 يومًا";}
+function fmtOne(v){return new Intl.NumberFormat("ar-SA",{minimumFractionDigits:1,maximumFractionDigits:1}).format(v||0)}
+function getSelectedFilters(){return{startDate:browserDate(document.getElementById("filter-start-date").value),endDate:browserDate(document.getElementById("filter-end-date").value),entity:document.getElementById("filter-entity-type").value||"الكل",status:document.getElementById("filter-status").value||"الكل",purpose:document.getElementById("filter-purpose").value||"الكل",dataType:document.getElementById("filter-data-type").value||"الكل",department:document.getElementById("filter-department").value||"الكل"}}
+function filterRowsState(rows,filters,ignore){ignore=ignore||[];return rows.filter((r)=>{if(!ignore.includes("startDate")&&filters.startDate&&(!r.requestDate||r.requestDate<filters.startDate))return false;if(!ignore.includes("endDate")&&filters.endDate&&(!r.requestDate||r.requestDate>filters.endDate))return false;if(!ignore.includes("entity")&&filters.entity!=="الكل"&&r.entityType!==filters.entity)return false;if(!ignore.includes("status")&&filters.status!=="الكل"&&r.status!==filters.status)return false;if(!ignore.includes("purpose")&&filters.purpose!=="الكل"&&r.purpose!==filters.purpose)return false;if(!ignore.includes("dataType")&&filters.dataType!=="الكل"&&r.dataType!==filters.dataType)return false;if(!ignore.includes("department")&&filters.department!=="الكل"&&r.department!==filters.department)return false;return true;});}
+function allowedDataTypes(rows,filters){const includeReasons=filters.status==="مرفوض";return rows.map((r)=>r.dataType).filter((v)=>v&&v!=="غير محدد").filter((v)=>includeReasons||!NON_DATA_TYPES.has(v));}
+function countByLabel(values){const m=new Map();values.forEach((v)=>{if(v)m.set(v,(m.get(v)||0)+1);});return m;}
+function setDataTypeHeading(rejected){const title=document.getElementById("data-types-title"),desc=document.getElementById("data-types-description");if(!title||!desc)return;if(rejected){title.textContent="أسباب الرفض ضمن الطلبات المرفوضة";desc.textContent="يعرض هذا الرسم الأسباب أو الأوصاف المرتبطة برفض الطلبات، وليس أنواع البيانات الفعلية.";return}title.textContent="أكثر أنواع البيانات طلبًا";desc.textContent="أولوية الطلب على المنتجات البيئية، مع استبعاد أسباب الرفض والعناصر التشغيلية غير التحليلية.";}
+

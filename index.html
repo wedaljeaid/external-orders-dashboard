@@ -4,27 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة الطلبات الخارجية للبيانات</title>
-    <meta
-      name="description"
-      content="لوحة تنفيذية تفاعلية لتحليل الطلبات الخارجية للبيانات البيئية باللغة العربية."
-    />
+    <meta name="description" content="لوحة تنفيذية تفاعلية لتحليل الطلبات الخارجية للبيانات البيئية باللغة العربية." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="shell">
       <header class="hero">
         <div class="hero-copy">
+          <div class="hero-brand">
+            <img class="brand-logo" src="./assets/center-logo.svg" alt="شعار المركز" />
+            <div class="brand-text">
+              <span class="brand-overline">المركز</span>
+              <strong>منصة الطلبات الخارجية للبيانات</strong>
+            </div>
+          </div>
           <span class="hero-kicker">نظام تحليلات تنفيذي</span>
           <h1>لوحة مؤشرات الطلبات الخارجية للبيانات</h1>
           <p>
-            عرض تفاعلي يربط القيادة بصورة فورية مع حجم الطلبات، الجهات الأكثر
-            طلبًا، أنماط الأغراض، والضغط التشغيلي على فرق البيانات البيئية.
+            عرض تفاعلي يربط القيادة بصورة فورية مع حجم الطلبات، الجهات الأكثر طلبًا،
+            الغايات التحليلية، والاتجاهات التشغيلية المرتبطة بخدمات البيانات البيئية.
           </p>
           <div class="hero-meta">
             <span class="status-pill" id="source-status">جارٍ تحميل المصدر</span>
@@ -32,7 +33,7 @@
           </div>
         </div>
         <aside class="hero-panel">
-          <div class="hero-panel-label">ملخص تنفيذي</div>
+          <div class="hero-panel-label">الملخص التنفيذي</div>
           <div id="executive-summary" class="executive-summary">
             يتم إعداد القراءة التنفيذية للبيانات...
           </div>
@@ -43,11 +44,9 @@
         <div class="section-heading">
           <div>
             <h2>عوامل التصفية</h2>
-            <p>استكشف البيانات حسب الزمن، الجهة، الحالة، والغرض.</p>
+            <p>استكشف البيانات حسب الزمن، الجهة، الإدارة، الحالة، الغرض، ونوع البيانات.</p>
           </div>
-          <button id="reset-filters" class="secondary-button" type="button">
-            إعادة الضبط
-          </button>
+          <button id="reset-filters" class="secondary-button" type="button">إعادة الضبط</button>
         </div>
         <div class="filters-grid">
           <label class="field">
@@ -58,21 +57,25 @@
             <span>إلى تاريخ</span>
             <input id="filter-end-date" type="date" />
           </label>
-          <label class="field">
+          <label class="field field-select">
             <span>نوع الجهة</span>
             <select id="filter-entity-type"></select>
           </label>
-          <label class="field">
+          <label class="field field-select">
             <span>حالة الطلب</span>
             <select id="filter-status"></select>
           </label>
-          <label class="field">
+          <label class="field field-select field-purpose">
             <span>الغرض من الطلب</span>
             <select id="filter-purpose"></select>
           </label>
           <label class="field field-select field-data-type">
             <span>نوع البيانات المطلوبة</span>
             <select id="filter-data-type"></select>
+          </label>
+          <label class="field field-select">
+            <span>اسم الإدارة</span>
+            <select id="filter-department"></select>
           </label>
         </div>
       </section>
@@ -84,7 +87,7 @@
           <div class="section-heading compact">
             <div>
               <h2>الاتجاه الزمني للطلبات</h2>
-              <p>تتبّع شهري لحجم الطلبات المستلمة.</p>
+              <p>تتبّع شهري يوضح تذبذب حجم الطلبات المستلمة عبر الزمن.</p>
             </div>
           </div>
           <div id="trend-chart" class="chart"></div>
@@ -94,7 +97,7 @@
           <div class="section-heading compact">
             <div>
               <h2>قراءات ذكية</h2>
-              <p>أهم الأنماط التي تحتاج انتباه الإدارة.</p>
+              <p>أبرز الرسائل التحليلية الموجهة لصاحب القرار.</p>
             </div>
           </div>
           <div id="insights-list" class="insights-list"></div>
@@ -104,7 +107,7 @@
           <div class="section-heading compact">
             <div>
               <h2>توزيع الحالات</h2>
-              <p>صورة سريعة لمخرجات الطلبات الحالية.</p>
+              <p>صورة سريعة لحالة معالجة الطلبات الحالية.</p>
             </div>
           </div>
           <div id="status-chart" class="chart chart-small"></div>
@@ -114,7 +117,7 @@
           <div class="section-heading compact">
             <div>
               <h2>نوع الجهة الطالبة</h2>
-              <p>مقارنة بين القنوات الرئيسية للطلب.</p>
+              <p>مقارنة بين القنوات المؤسسية الرئيسية للطلب.</p>
             </div>
           </div>
           <div id="entity-chart" class="chart chart-small"></div>
@@ -123,8 +126,8 @@
         <article class="card chart-card span-4">
           <div class="section-heading compact">
             <div>
-              <h2>مصفوفة زمن الاستجابة</h2>
-              <p>توزيع زمني يوضح سرعة الاستجابة والطلبات المفتوحة والسجلات التي تحتاج مراجعة تاريخية.</p>
+              <h2>زمن الاستجابة</h2>
+              <p>توزيع زمني للطلبات التي تم الرد عليها فقط عبر شرائح الاستجابة الفعلية.</p>
             </div>
           </div>
           <div id="workload-chart" class="chart chart-small"></div>
@@ -134,7 +137,7 @@
           <div class="section-heading compact">
             <div>
               <h2>أكثر الجهات طلبًا</h2>
-              <p>أعلى الجهات من حيث حجم الطلبات.</p>
+              <p>أعلى الجهات من حيث حجم الطلبات ضمن التصفية الحالية.</p>
             </div>
           </div>
           <div id="requesters-chart" class="chart"></div>
@@ -143,8 +146,8 @@
         <article class="card chart-card span-6">
           <div class="section-heading compact">
             <div>
-              <h2>أكثر أنواع البيانات طلبًا</h2>
-              <p>أولوية الطلب على المنتجات البيئية المختلفة.</p>
+              <h2 id="data-types-title">أكثر أنواع البيانات طلبًا</h2>
+              <p id="data-types-description">أولوية الطلب على المنتجات البيئية، مع عزل أسباب الرفض عن الأنواع الفعلية.</p>
             </div>
           </div>
           <div id="data-types-chart" class="chart"></div>
@@ -154,7 +157,7 @@
           <div class="section-heading compact">
             <div>
               <h2>تحليل الأغراض والمحافظات</h2>
-              <p>قراءة مزدوجة للغرض الأكثر شيوعًا ومناطق التركز الأعلى.</p>
+              <p>قراءة مزدوجة للغرض الأكثر شيوعًا ومناطق التركز الأعلى في الطلب.</p>
             </div>
           </div>
           <div class="dual-chart">
@@ -171,3 +174,4 @@
     <script src="./app.js"></script>
   </body>
 </html>
+
