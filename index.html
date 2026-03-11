@@ -1,0 +1,173 @@
+﻿<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة الطلبات الخارجية للبيانات</title>
+    <meta
+      name="description"
+      content="لوحة تنفيذية تفاعلية لتحليل الطلبات الخارجية للبيانات البيئية باللغة العربية."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <span class="hero-kicker">نظام تحليلات تنفيذي</span>
+          <h1>لوحة مؤشرات الطلبات الخارجية للبيانات</h1>
+          <p>
+            عرض تفاعلي يربط القيادة بصورة فورية مع حجم الطلبات، الجهات الأكثر
+            طلبًا، أنماط الأغراض، والضغط التشغيلي على فرق البيانات البيئية.
+          </p>
+          <div class="hero-meta">
+            <span class="status-pill" id="source-status">جارٍ تحميل المصدر</span>
+            <span class="status-pill muted" id="refresh-status">لم يتم التحديث بعد</span>
+          </div>
+        </div>
+        <aside class="hero-panel">
+          <div class="hero-panel-label">ملخص تنفيذي</div>
+          <div id="executive-summary" class="executive-summary">
+            يتم إعداد القراءة التنفيذية للبيانات...
+          </div>
+        </aside>
+      </header>
+
+      <section class="controls card">
+        <div class="section-heading">
+          <div>
+            <h2>عوامل التصفية</h2>
+            <p>استكشف البيانات حسب الزمن، الجهة، الحالة، والغرض.</p>
+          </div>
+          <button id="reset-filters" class="secondary-button" type="button">
+            إعادة الضبط
+          </button>
+        </div>
+        <div class="filters-grid">
+          <label class="field">
+            <span>من تاريخ</span>
+            <input id="filter-start-date" type="date" />
+          </label>
+          <label class="field">
+            <span>إلى تاريخ</span>
+            <input id="filter-end-date" type="date" />
+          </label>
+          <label class="field">
+            <span>نوع الجهة</span>
+            <select id="filter-entity-type"></select>
+          </label>
+          <label class="field">
+            <span>حالة الطلب</span>
+            <select id="filter-status"></select>
+          </label>
+          <label class="field">
+            <span>الغرض من الطلب</span>
+            <select id="filter-purpose"></select>
+          </label>
+          <label class="field field-select field-data-type">
+            <span>نوع البيانات المطلوبة</span>
+            <select id="filter-data-type"></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="kpi-grid" id="kpi-grid"></section>
+
+      <section class="content-grid">
+        <article class="card chart-card span-8">
+          <div class="section-heading compact">
+            <div>
+              <h2>الاتجاه الزمني للطلبات</h2>
+              <p>تتبّع شهري لحجم الطلبات المستلمة.</p>
+            </div>
+          </div>
+          <div id="trend-chart" class="chart"></div>
+        </article>
+
+        <article class="card insights-card span-4">
+          <div class="section-heading compact">
+            <div>
+              <h2>قراءات ذكية</h2>
+              <p>أهم الأنماط التي تحتاج انتباه الإدارة.</p>
+            </div>
+          </div>
+          <div id="insights-list" class="insights-list"></div>
+        </article>
+
+        <article class="card chart-card span-4">
+          <div class="section-heading compact">
+            <div>
+              <h2>توزيع الحالات</h2>
+              <p>صورة سريعة لمخرجات الطلبات الحالية.</p>
+            </div>
+          </div>
+          <div id="status-chart" class="chart chart-small"></div>
+        </article>
+
+        <article class="card chart-card span-4">
+          <div class="section-heading compact">
+            <div>
+              <h2>نوع الجهة الطالبة</h2>
+              <p>مقارنة بين القنوات الرئيسية للطلب.</p>
+            </div>
+          </div>
+          <div id="entity-chart" class="chart chart-small"></div>
+        </article>
+
+        <article class="card chart-card span-4">
+          <div class="section-heading compact">
+            <div>
+              <h2>مصفوفة زمن الاستجابة</h2>
+              <p>توزيع زمني يوضح سرعة الاستجابة والطلبات المفتوحة والسجلات التي تحتاج مراجعة تاريخية.</p>
+            </div>
+          </div>
+          <div id="workload-chart" class="chart chart-small"></div>
+        </article>
+
+        <article class="card chart-card span-6">
+          <div class="section-heading compact">
+            <div>
+              <h2>أكثر الجهات طلبًا</h2>
+              <p>أعلى الجهات من حيث حجم الطلبات.</p>
+            </div>
+          </div>
+          <div id="requesters-chart" class="chart"></div>
+        </article>
+
+        <article class="card chart-card span-6">
+          <div class="section-heading compact">
+            <div>
+              <h2>أكثر أنواع البيانات طلبًا</h2>
+              <p>أولوية الطلب على المنتجات البيئية المختلفة.</p>
+            </div>
+          </div>
+          <div id="data-types-chart" class="chart"></div>
+        </article>
+
+        <article class="card chart-card span-12">
+          <div class="section-heading compact">
+            <div>
+              <h2>تحليل الأغراض والمحافظات</h2>
+              <p>قراءة مزدوجة للغرض الأكثر شيوعًا ومناطق التركز الأعلى.</p>
+            </div>
+          </div>
+          <div class="dual-chart">
+            <div id="purpose-chart" class="chart chart-medium"></div>
+            <div id="regions-chart" class="chart chart-medium"></div>
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <script src="./config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
