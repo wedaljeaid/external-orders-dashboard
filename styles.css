@@ -35,10 +35,10 @@ body {
 }
 .hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg,rgba(95,160,111,.12),transparent 42%), linear-gradient(315deg,rgba(196,217,167,.10),transparent 35%); }
 .hero > * { position: relative; z-index: 1; }
-.hero-brand { display: inline-flex; align-items: center; gap: 14px; margin-bottom: 2px; }
-.brand-logo { width: 68px; height: 68px; object-fit: contain; flex: 0 0 auto; }
+.hero-brand { display: inline-flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.brand-logo { width: 62px; height: 62px; object-fit: contain; flex: 0 0 auto; }
 .brand-text { display: grid; gap: 4px; }
-.brand-overline { color: #467f56; font-weight: 800; letter-spacing: .04em; font-size: .92rem; }
+.brand-overline { color: #467f56; font-weight: 800; letter-spacing: .04em; font-size: .92rem; line-height: 1; }
 .hero-kicker, .status-pill { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; font-weight: 700; }
 .hero-kicker { background: rgba(95,160,111,.12); color: #467f56; margin-bottom: 14px; }
 .hero h1 { margin: 0 0 12px; font-size: clamp(2rem,4vw,3rem); line-height: 1.1; }
@@ -113,4 +113,4 @@ body {
 
 
 
-@media (max-width:640px) { .filters-grid, .kpi-grid, .dual-chart { grid-template-columns: 1fr; } .brand-logo { width: 56px; height: 56px; } }
+@media (max-width:640px) { .filters-grid, .kpi-grid, .dual-chart { grid-template-columns: 1fr; } .brand-logo { width: 52px; height: 52px; } }
