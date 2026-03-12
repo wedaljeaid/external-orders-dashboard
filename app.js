@@ -236,32 +236,29 @@ function plotTrend(data){
 function plotPie(id,data,rose){
   const isStatus=id==="status-chart";
   const chart=charts[id];
-  const labelLayout=isStatus?((params)=>{
-    const name=(data[params.dataIndex]||{}).name||"";
-    const width=chart.getWidth();
-    const height=chart.getHeight();
-    const points=(params.labelLinePoints||[]).map((point)=>point.slice());
-    if(name==="معلق عند مقدم الطلب"){
-      const x=Math.round(width*0.51), y=Math.round(height*0.03);
-      if(points.length===3){points[1]=[Math.round(width*0.53),Math.round(height*0.11)]; points[2]=[x,y+32];}
-      return {x:x,y:y,align:"center",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
-    }
-    if(name==="تحت الاجراء"){
-      const x=Math.round(width*0.89), y=Math.round(height*0.06);
-      if(points.length===3){points[1]=[Math.round(width*0.81),Math.round(height*0.12)]; points[2]=[x-6,y+22];}
-      return {x:x,y:y,align:"right",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
-    }
-    if(name==="مرفوض"){
-      const x=Math.round(width*0.11), y=Math.round(height*0.20);
-      if(points.length===3){points[1]=[Math.round(width*0.20),Math.round(height*0.24)]; points[2]=[x+38,y+26];}
-      return {x:x,y:y,align:"left",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
-    }
-    return {moveOverlap:"shiftY"};
-  }):{hideOverlap:true,moveOverlap:"shiftY"};
+  const total=data.reduce((sum,item)=>sum+(Number(item.value)||0),0);
+  const statusItems=new Map(data.map((item)=>[item.name,item]));
+  const statusGraphic=isStatus?buildStatusGraphics(statusItems,total,chart.getWidth(),chart.getHeight()):[];
   chart.setOption({
     tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},
     legend:{bottom:0,textStyle:{color:"#637767"}},
-    series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:true,minShowLabelAngle:isStatus?0:4,labelLine:{show:true,length:isStatus?10:12,length2:isStatus?14:10,smooth:true},labelLayout:labelLayout,label:{color:"#153243",position:"outside",alignTo:isStatus?"edge":"none",edgeDistance:isStatus?10:0,bleedMargin:isStatus?6:10,width:isStatus?118:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]
+    graphic:statusGraphic,
+    series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:!isStatus,minShowLabelAngle:isStatus?0:4,labelLine:isStatus?{show:false}:{show:true,length:12,length2:10,smooth:true},label:isStatus?{show:false}:{color:"#153243",position:"outside",alignTo:"none",edgeDistance:0,bleedMargin:10,width:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]
+  });
+}
+function buildStatusGraphics(statusItems,total,width,height){
+  const placements=[
+    {name:"مرفوض",x:0.11,y:0.30,align:"left"},
+    {name:"معلق عند مقدم الطلب",x:0.51,y:0.10,align:"center"},
+    {name:"تحت الاجراء",x:0.86,y:0.15,align:"right"},
+    {name:"تم التسليم",x:0.86,y:0.78,align:"right"}
+  ];
+  return placements.flatMap((cfg)=>{
+    const item=statusItems.get(cfg.name);
+    if(!item||!item.value) return [];
+    const value=Number(item.value)||0;
+    const percent=total?fmtPct(value/total):fmtPct(0);
+    return [{type:"text",silent:true,left:cfg.align==="right"?null:Math.round(width*cfg.x),right:cfg.align==="right"?Math.round(width*(1-cfg.x)):null,top:Math.round(height*cfg.y),style:{text:cfg.name+"\n"+percent,fill:"#153243",font:"500 17px Tajawal",textAlign:cfg.align,textVerticalAlign:"top",lineHeight:24}}];
   });
 }
 function plotBar(id,data,color,horizontal,limit){
