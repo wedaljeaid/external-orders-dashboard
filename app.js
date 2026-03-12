@@ -241,18 +241,18 @@ function plotPie(id,data,rose){
     const width=chart.getWidth(), height=chart.getHeight();
     const points=(params.labelLinePoints||[]).map((point)=>point.slice());
     if(name==="معلق عند مقدم الطلب"){
-      const x=Math.round(width*0.50), y=Math.round(height*0.05);
-      if(points.length===3){points[1]=[Math.round(width*0.52),Math.round(height*0.16)]; points[2]=[x,y+38];}
+      const x=Math.round(width*0.50), y=Math.round(height*0.03);
+      if(points.length===3){points[1]=[Math.round(width*0.52),Math.round(height*0.14)]; points[2]=[x,y+34];}
       return {x:x,y:y,align:"center",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
     }
     if(name==="تحت الاجراء"){
-      const x=Math.round(width*0.87), y=Math.round(height*0.11);
-      if(points.length===3){points[1]=[Math.round(width*0.79),Math.round(height*0.17)]; points[2]=[x-8,y+24];}
+      const x=Math.round(width*0.87), y=Math.round(height*0.09);
+      if(points.length===3){points[1]=[Math.round(width*0.79),Math.round(height*0.15)]; points[2]=[x-8,y+22];}
       return {x:x,y:y,align:"right",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
     }
     if(name==="مرفوض"){
-      const x=Math.round(width*0.10), y=Math.round(height*0.28);
-      if(points.length===3){points[1]=[Math.round(width*0.20),Math.round(height*0.24)]; points[2]=[x+40,y+26];}
+      const x=Math.round(width*0.10), y=Math.round(height*0.24);
+      if(points.length===3){points[1]=[Math.round(width*0.20),Math.round(height*0.20)]; points[2]=[x+40,y+24];}
       return {x:x,y:y,align:"left",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
     }
     return {moveOverlap:"shiftY"};
