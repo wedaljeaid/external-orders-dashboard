@@ -235,7 +235,29 @@ function plotTrend(data){
 }
 function plotPie(id,data,rose){
   const isStatus=id==="status-chart";
-  charts[id].setOption({tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},legend:{bottom:0,textStyle:{color:"#637767"}},series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:true,minShowLabelAngle:isStatus?8:4,labelLine:{show:true,length:isStatus?10:12,length2:isStatus?14:10,smooth:true},labelLayout:{hideOverlap:true,moveOverlap:"shiftY"},label:{color:"#153243",position:"outside",alignTo:isStatus?"edge":"none",edgeDistance:isStatus?10:0,bleedMargin:isStatus?6:10,width:isStatus?112:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]});
+  const chart=charts[id];
+  const labelLayout=isStatus?((params)=>{
+    const name=(data[params.dataIndex]||{}).name||"";
+    const width=chart.getWidth();
+    const height=chart.getHeight();
+    const points=(params.labelLinePoints||[]).map((point)=>point.slice());
+    if(name==="معلق عند مقدم الطلب"){
+      const x=Math.round(width*0.51), y=Math.round(height*0.08);
+      if(points.length===3){points[1]=[Math.round(width*0.53),Math.round(height*0.18)]; points[2]=[x,y+34];}
+      return {x:x,y:y,align:"center",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
+    }
+    if(name==="تحت الاجراء"){
+      const x=Math.round(width*0.89), y=Math.round(height*0.11);
+      if(points.length===3){points[1]=[Math.round(width*0.81),Math.round(height*0.18)]; points[2]=[x-6,y+24];}
+      return {x:x,y:y,align:"right",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
+    }
+    return {moveOverlap:"shiftY"};
+  }):{hideOverlap:true,moveOverlap:"shiftY"};
+  chart.setOption({
+    tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},
+    legend:{bottom:0,textStyle:{color:"#637767"}},
+    series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:true,minShowLabelAngle:isStatus?0:4,labelLine:{show:true,length:isStatus?10:12,length2:isStatus?14:10,smooth:true},labelLayout:labelLayout,label:{color:"#153243",position:"outside",alignTo:isStatus?"edge":"none",edgeDistance:isStatus?10:0,bleedMargin:isStatus?6:10,width:isStatus?118:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]
+  });
 }
 function plotBar(id,data,color,horizontal,limit){
   const labels=data.map((x)=>limit?short(x[0],limit):x[0]), values=data.map((x)=>x[1]);
