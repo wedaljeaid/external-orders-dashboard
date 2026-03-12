@@ -236,42 +236,28 @@ function plotTrend(data){
 function plotPie(id,data,rose){
   const isStatus=id==="status-chart";
   const chart=charts[id];
-  const total=data.reduce((sum,item)=>sum+(Number(item.value)||0),0);
-  const statusItems=new Map(data.map((item)=>[item.name,item]));
-  const statusGraphic=isStatus?buildStatusGraphics(statusItems,total,chart.getWidth(),chart.getHeight()):[];
-  chart.setOption({
-    tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},
-    legend:{bottom:0,textStyle:{color:"#637767"}},
-    graphic:statusGraphic,
-    series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:!isStatus,minShowLabelAngle:isStatus?0:4,labelLine:isStatus?{show:false}:{show:true,length:12,length2:10,smooth:true},label:isStatus?{show:false}:{color:"#153243",position:"outside",alignTo:"none",edgeDistance:0,bleedMargin:10,width:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]
-  });
-}
-function buildStatusGraphics(statusItems,total,width,height){
-  const placements=[
-    {name:"مرفوض",x:32,y:158,align:"left",boxWidth:120},
-    {name:"معلق عند مقدم الطلب",x:220,y:72,align:"center",boxWidth:170},
-    {name:"تحت الاجراء",x:430,y:102,align:"right",boxWidth:120},
-    {name:"تم التسليم",x:404,y:360,align:"right",boxWidth:140}
-  ];
-  return placements.flatMap((cfg)=>{
-    const item=statusItems.get(cfg.name);
-    if(!item||!item.value) return [];
-    const value=Number(item.value)||0;
-    const percent=total?fmtPct(value/total):fmtPct(0);
-    const left=Math.round((cfg.x/600)*width);
-    const top=Math.round((cfg.y/520)*height);
-    const boxWidth=Math.round((cfg.boxWidth/600)*width);
-    return [{
-      type:"group",
-      silent:true,
-      left:left,
-      top:top,
-      children:[
-        {type:"text",style:{x:cfg.align==="center"?Math.round(boxWidth/2):cfg.align==="right"?boxWidth:0,y:0,text:cfg.name,fill:"#153243",font:"700 16px Tajawal",textAlign:cfg.align,textVerticalAlign:"top"}},
-        {type:"text",style:{x:cfg.align==="center"?Math.round(boxWidth/2):cfg.align==="right"?boxWidth:0,y:28,text:percent,fill:"#4f6675",font:"600 15px Tajawal",textAlign:cfg.align,textVerticalAlign:"top"}}
-      ]
-    }];
-  });
+  const statusLabelLayout=isStatus?((params)=>{
+    const name=(data[params.dataIndex]||{}).name||"";
+    const width=chart.getWidth(), height=chart.getHeight();
+    const points=(params.labelLinePoints||[]).map((point)=>point.slice());
+    if(name==="معلق عند مقدم الطلب"){
+      const x=Math.round(width*0.50), y=Math.round(height*0.05);
+      if(points.length===3){points[1]=[Math.round(width*0.52),Math.round(height*0.16)]; points[2]=[x,y+38];}
+      return {x:x,y:y,align:"center",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
+    }
+    if(name==="تحت الاجراء"){
+      const x=Math.round(width*0.87), y=Math.round(height*0.11);
+      if(points.length===3){points[1]=[Math.round(width*0.79),Math.round(height*0.17)]; points[2]=[x-8,y+24];}
+      return {x:x,y:y,align:"right",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
+    }
+    if(name==="مرفوض"){
+      const x=Math.round(width*0.10), y=Math.round(height*0.28);
+      if(points.length===3){points[1]=[Math.round(width*0.20),Math.round(height*0.24)]; points[2]=[x+40,y+26];}
+      return {x:x,y:y,align:"left",verticalAlign:"top",labelLinePoints:points,moveOverlap:"none"};
+    }
+    return {moveOverlap:"shiftY"};
+  }):{hideOverlap:true,moveOverlap:"shiftY"};
+  chart.setOption({tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},legend:{bottom:0,textStyle:{color:"#637767"}},series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:true,minShowLabelAngle:isStatus?0:4,labelLine:{show:true,length:isStatus?10:12,length2:isStatus?14:10,smooth:true},labelLayout:statusLabelLayout,label:{show:true,color:"#153243",position:"outside",alignTo:isStatus?"edge":"none",edgeDistance:isStatus?10:0,bleedMargin:isStatus?6:10,width:isStatus?118:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]});
 }
 function plotBar(id,data,color,horizontal,limit){
   const labels=data.map((x)=>limit?short(x[0],limit):x[0]), values=data.map((x)=>x[1]);
