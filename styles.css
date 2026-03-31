@@ -71,6 +71,7 @@ body {
 .kpi-label { color: var(--muted); font-weight: 700; }
 .kpi-value { margin-top: 10px; font-size: 1.8rem; font-weight: 800; }
 .kpi-note { margin-top: 8px; color: var(--muted); line-height: 1.6; }
+.kpi-breakdown { display: block; margin-top: 8px; color: var(--text); font-weight: 700; line-height: 1.8; }
 .content-grid { display: grid; grid-template-columns: repeat(12,minmax(0,1fr)); gap: 14px; margin-top: 20px; }
 .span-12 { grid-column: span 12; }
 .span-8 { grid-column: span 8; }

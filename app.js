@@ -2,9 +2,9 @@
 const CFG={googleSheetId:"1LM7ZYKm8PNG8kRKx5i5rWTGdY5csSlhO",googleSheetGid:"0",publishedCsvUrl:"",autoRefreshMinutes:15,fallbackDataUrl:"./data/external_orders.json",...(window.DASHBOARD_CONFIG||{})};
 const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const COLORS={"تم التسليم":"#2d9c8f","مرفوض":"#d95d39","تحت الاجراء":"#f2a65a","معلق عند مقدم الطلب":"#6c8aa0","غير محدد":"#9db4c0"};
-const charts={}; let master=[],filtered=[];
+const charts={}; let master=[],filtered=[]; const interactiveSelections={trend:new Set(),status:new Set(),entity:new Set(),requester:new Set(),dataType:new Set(),purpose:new Set(),region:new Set(),workload:new Set()};
 document.addEventListener("DOMContentLoaded",init);
-async function init(){initCharts();bindFilters();await loadData();if(CFG.autoRefreshMinutes>0){setInterval(loadData,CFG.autoRefreshMinutes*60000);}}
+async function init(){initCharts();bindFilters();bindChartInteractions();await loadData();if(CFG.autoRefreshMinutes>0){setInterval(loadData,CFG.autoRefreshMinutes*60000);}}
 function liveUrl(){return CFG.publishedCsvUrl||`https://docs.google.com/spreadsheets/d/${CFG.googleSheetId}/export?format=csv&gid=${CFG.googleSheetGid||0}`;}
 function txt(v){return String(v||"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim()||"غير محدد";}
 function val(row,key){const direct=row[key]; if(direct!==undefined) return direct; const wanted=txt(key); const found=Object.keys(row).find((k)=>txt(k)===wanted); return found?row[found]:"";}
@@ -190,7 +190,7 @@ function render(rows,filters){
   filters=filters||getSelectedFilters();
   const status=countBy(rows,"status"), entity=countBy(rows,"entityType"), requester=countBy(rows,"requester"), purpose=countBy(rows,"purpose"), region=countBy(rows,"region"), departmentMap=countBy(rows,"department"), workload=countBy(rows,"turnaroundBucket");
   const showRejectedReasons=filters.status==="مرفوض", showWaitingType=filters.status==="معلق عند مقدم الطلب";
-  const dataType=showRejectedReasons?countByLabel(rows.map((r)=>mapRejectedReason(r.dataType)).filter((v)=>v)):showWaitingType?countByLabel(rows.map((r)=>mapWaitingReason(r)).filter((v)=>v)):countBy(rows.filter((r)=>!NON_DATA_TYPES.has(r.dataType)),"dataType");
+  const dataType=showRejectedReasons?countByLabel(rows.map((r)=>mapRejectedReason(r)).filter((v)=>v)):showWaitingType?countByLabel(rows.map((r)=>mapWaitingReason(r)).filter((v)=>v)):countBy(rows.filter((r)=>!NON_DATA_TYPES.has(r.dataType)),"dataType");
 
   const responded=rows.filter((r)=>isRespondedStatus(r.status)), delivered=rows.filter((r)=>r.status==="تم التسليم"), rejected=rows.filter((r)=>r.status==="مرفوض"), inProgress=rows.filter((r)=>r.status==="تحت الاجراء"), waitingSubmitter=rows.filter((r)=>r.status==="معلق عند مقدم الطلب");
   const valid=responded.filter((r)=>Number.isFinite(r.turnaroundDays)&&r.turnaroundDays>=0);
@@ -198,8 +198,9 @@ function render(rows,filters){
   const completion=rows.length?(responded.length/rows.length):0;
   const tr=trend(rows), topPurpose=topEntry(purpose), topRequester=topEntry(requester), topData=topEntry(dataType), topRegion=topEntry(region), topDepartment=topEntry(departmentMap), topMonth=[...tr].sort((a,b)=>b.count-a.count)[0];
   const responseMap=countByLabel(valid.map((r)=>responseBucket(r.turnaroundDays)));
+  const departmentBreakdown=["طلبات البيانات البيئية","طلبات نمذجة البيانات البيئية"].map((label)=>label+" ("+fmtNum(departmentMap.get(label)||0)+")").join(" | ");
   const kpis=[];
-  kpis.push(["إجمالي الطلبات",fmtNum(rows.length),"إجمالي السجلات ضمن التصفية الحالية."]);
+  kpis.push(["إجمالي الطلبات",fmtNum(rows.length),"إجمالي السجلات ضمن التصفية الحالية.",departmentBreakdown]);
   kpis.push(["نسبة الإنجاز",fmtPct(completion),"الطلبات التي تم الاستجابة لها: تم التسليم ("+fmtNum(delivered.length)+") | مرفوض ("+fmtNum(rejected.length)+")"]);
   kpis.push(["طلبات قيد المتابعة",fmtNum(inProgress.length+waitingSubmitter.length),"تحت الإجراء: "+fmtNum(inProgress.length)+" | معلقة عند مقدم الطلب: "+fmtNum(waitingSubmitter.length)+"."]);
   kpis.push(["متوسط المعالجة",valid.length?(fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يوم"):"غير متاح","متوسط زمن المعالجة يبلغ "+fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يومًا استنادًا إلى "+fmtNum(valid.length)+" طلبًا."]);
@@ -207,7 +208,7 @@ function render(rows,filters){
   kpis.push(["الغرض الأكثر تكرارًا",topPurpose.label,fmtNum(topPurpose.value)+" طلبًا تقود هذا المسار التحليلي."]);
   kpis.push(["أكثر جهة طلبًا",topRequester.label,fmtNum(topRequester.value)+" طلبًا من الجهة الأعلى نشاطًا."]);
   kpis.push([showRejectedReasons?"أبرز سبب للرفض":"أكثر نوع بيانات طلبًا",topData.label,fmtNum(topData.value)+" طلبًا ضمن القراءة الحالية."]);
-  document.getElementById("kpi-grid").innerHTML=kpis.map((k)=>"<article class=\"kpi-card\"><div class=\"kpi-label\">"+esc(k[0])+"</div><div class=\"kpi-value\">"+esc(k[1])+"</div><div class=\"kpi-note\">"+esc(k[2])+"</div></article>").join("");
+  document.getElementById("kpi-grid").innerHTML=kpis.map((k)=>"<article class=\"kpi-card\"><div class=\"kpi-label\">"+esc(k[0])+"</div><div class=\"kpi-value\">"+esc(k[1])+"</div><div class=\"kpi-note\">"+esc(k[2])+(k[3]?"<span class=\"kpi-breakdown\">"+esc(k[3])+"</span>":"")+"</div></article>").join("");
   const summary=[];
   summary.push("<div class=\"summary-item\"><strong>ملخص عام</strong><span>تعرض اللوحة "+fmtNum(rows.length)+" طلبًا ضمن التصفية الحالية، وتمت الاستجابة رسميًا لـ "+fmtNum(responded.length)+" طلبًا بنسبة إنجاز تبلغ "+fmtPct(completion)+".</span></div>");
   summary.push("<div class=\"summary-item\"><strong>محركات الطلب المؤسسي</strong><span>أعلى غرض ظاهر هو "+esc(topPurpose.label)+"، بينما تتصدر "+esc(topRequester.label)+" الجهات الأكثر طلبًا للبيانات خلال الفترة المحددة.</span></div>");
@@ -231,7 +232,7 @@ function render(rows,filters){
   plotBar("workload-chart",workloadOrder.map((name)=>[name,responseMap.get(name)||0]),"#5FAF7F",true,18);
 }
 function plotTrend(data){
-  charts["trend-chart"].setOption({tooltip:{trigger:"axis",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].axisValue+"</strong><br>عدد الطلبات: "+fmtNum(params[0].value)+"</div>"},grid:{left:24,right:24,bottom:20,containLabel:true},xAxis:{type:"category",data:data.map((x)=>x.label),axisLabel:{color:"#637767",rotate:28}},yAxis:{type:"value",axisLabel:{color:"#637767"}},series:[{type:"line",smooth:true,symbolSize:8,data:data.map((x)=>x.count),lineStyle:{color:"#76B67E",width:4},itemStyle:{color:"#76B67E"},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:"rgba(118,182,126,.34)"},{offset:1,color:"rgba(118,182,126,.05)"}])}}]});
+  charts["trend-chart"].setOption({tooltip:{trigger:"axis",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].axisValue+"</strong><br>عدد الطلبات: "+fmtNum(params[0].value)+"</div>"},grid:{left:24,right:24,bottom:20,containLabel:true},xAxis:{type:"category",data:data.map((x)=>x.label),axisLabel:{color:"#637767",rotate:28}},yAxis:{type:"value",axisLabel:{color:"#637767"}},series:[{type:"line",smooth:true,symbolSize:8,data:data.map((x)=>({value:x.count,name:x.label,monthLabel:x.label,selected:isInteractiveActive("trend",x.label)})),lineStyle:{color:"#76B67E",width:4},itemStyle:{color:"#76B67E"},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:"rgba(118,182,126,.34)"},{offset:1,color:"rgba(118,182,126,.05)"}])}}]});
 }
 function plotPie(id,data,rose){
   const isStatus=id==="status-chart";
@@ -260,17 +261,20 @@ function plotPie(id,data,rose){
   chart.setOption({tooltip:{trigger:"item",confine:true,extraCssText:"max-width:420px;white-space:normal;direction:rtl;text-align:right;",formatter:(p)=>"<div dir=\"rtl\"><strong>"+p.name+"</strong><br>العدد: "+fmtNum(p.value)+"<br>النسبة: "+fmtPct(p.percent/100)+"</div>"},legend:{bottom:0,textStyle:{color:"#637767"}},series:[{type:"pie",roseType:rose?"radius":false,radius:rose?[34,118]:isStatus?["42%","64%"]:["48%","72%"],center:["50%",isStatus?"42%":rose?"50%":"44%"],avoidLabelOverlap:true,minShowLabelAngle:isStatus?0:4,labelLine:{show:true,length:isStatus?10:12,length2:isStatus?14:10,smooth:true},labelLayout:statusLabelLayout,label:{show:true,color:"#153243",position:"outside",alignTo:isStatus?"edge":"none",edgeDistance:isStatus?10:0,bleedMargin:isStatus?6:10,width:isStatus?118:98,overflow:"break",lineHeight:18,formatter:(p)=>rose?short(p.name,16)+"\n"+fmtNum(p.value):short(p.name,16)+"\n"+fmtPct(p.percent/100)},data:data}]});
 }
 function plotBar(id,data,color,horizontal,limit){
-  const labels=data.map((x)=>limit?short(x[0],limit):x[0]), values=data.map((x)=>x[1]);
-  charts[id].setOption({tooltip:{trigger:"axis",axisPointer:{type:"shadow"},confine:true,extraCssText:"max-width:440px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].name+"</strong><br>القيمة: "+fmtNum(params[0].value)+"</div>"},grid:{top:10,left:18,right:14,bottom:horizontal?12:52,containLabel:true},xAxis:horizontal?{type:"value",axisLabel:{color:"#5c7382"}}:{type:"category",data:labels,axisLabel:{color:"#5c7382",rotate:horizontal?0:0,interval:0}},yAxis:horizontal?{type:"category",data:labels,axisLabel:{color:"#153243",interval:0}}:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"bar",data:values,itemStyle:{color:color,borderRadius:[12,12,12,12]}}]});
+  const labels=data.map((x)=>limit?short(x[0],limit):x[0]), values=data.map((x)=>({value:x[1],name:x[0]}));
+  charts[id].setOption({tooltip:{trigger:"axis",axisPointer:{type:"shadow"},confine:true,extraCssText:"max-width:440px;white-space:normal;direction:rtl;text-align:right;",formatter:(params)=>"<div dir=\"rtl\"><strong>"+params[0].data.name+"</strong><br>القيمة: "+fmtNum(params[0].value)+"</div>"},grid:{top:10,left:18,right:14,bottom:horizontal?12:52,containLabel:true},xAxis:horizontal?{type:"value",axisLabel:{color:"#5c7382"}}:{type:"category",data:labels,axisLabel:{color:"#5c7382",rotate:horizontal?0:0,interval:0}},yAxis:horizontal?{type:"category",data:labels,axisLabel:{color:"#153243",interval:0}}:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"bar",data:values,itemStyle:{color:color,borderRadius:[12,12,12,12]}}]});
 }
 
 function bindFilters(){
   ["filter-start-date","filter-end-date","filter-entity-type","filter-status","filter-purpose","filter-data-type","filter-department"].forEach((id)=>{
     document.getElementById(id).addEventListener("change", applyFilters);
   });
+  document.getElementById("filter-requester").addEventListener("input", applyFilters);
   document.getElementById("reset-filters").addEventListener("click", ()=>{
     ["filter-start-date","filter-end-date"].forEach((id)=>document.getElementById(id).value="");
     ["filter-entity-type","filter-status","filter-purpose","filter-data-type","filter-department"].forEach((id)=>document.getElementById(id).value="الكل");
+    document.getElementById("filter-requester").value="";
+    Object.values(interactiveSelections).forEach((set)=>set.clear());
     applyFilters();
   });
 }
@@ -279,6 +283,7 @@ function fillFilters(){
   fillSelect("filter-entity-type",filterRowsState(master,filters,["entity"]).map((x)=>x.entityType));
   fillSelect("filter-status",filterRowsState(master,filters,["status"]).map((x)=>x.status));
   fillSelect("filter-purpose",filterRowsState(master,filters,["purpose"]).map((x)=>x.purpose));
+  fillRequesterOptions(filterRowsState(master,filters,["requester"]).map((x)=>x.requester));
   fillSelect("filter-data-type",allowedDataTypes(filterRowsState(master,filters,["dataType"]),filters));
   fillSelect("filter-department",filterRowsState(master,filters,["department"]).map((x)=>x.department));
 }
@@ -288,23 +293,31 @@ function applyFilters(){
   filtered=filterRowsState(master,filters);
   render(filtered,filters);
 }
-const NON_DATA_TYPES=new Set(["البيانات المطلوبة غير متوفرة بالإدارة","البيانات المطلوبة لاتتوفر لدى الإدارة","البيانات المطلوبة لاتتوفر لدى المركز","البيانات المطلوبة لاتتوفر لدى الإدارة حاليا","البيانات المطلوبة لاتتوفر لدى المركز حاليا","البيانات المطلوبة لاتتوفر لدى الإدارة حالياً","البيانات المطلوبة لاتتوفر لدى المركز حالياً","معلق في انتظار تحديد نوع البيانات"]);
+const NON_DATA_TYPES=new Set(["البيانات المطلوبة غير متوفرة بالإدارة","البيانات المطلوبة لاتتوفر لدى الإدارة","البيانات المطلوبة لاتتوفر لدى المركز","البيانات المطلوبة لاتتوفر لدى الإدارة حاليا","البيانات المطلوبة لاتتوفر لدى المركز حاليا","البيانات المطلوبة لاتتوفر لدى الإدارة حالياً","البيانات المطلوبة لاتتوفر لدى المركز حالياً","معلق في انتظار تحديد نوع البيانات","الطلب غير واضح","لم يتم تعبئة النموذج","لاتوجد محطة جودة هواء في الموقع المطلوب","البيانات المطلوبة لاتحقق الحد الأدنى من الاكتمال اللازم للمشاركة","لم يتم تحديد نوع البيانات"]);
 function responseBucket(days){if(!Number.isFinite(days)||days<0)return null;if(days<=7)return"خلال 7 أيام";if(days<=30)return"خلال 8-30 يومًا";return"أكثر من 30 يومًا";}
 function fmtOne(v){return new Intl.NumberFormat("ar-SA",{minimumFractionDigits:1,maximumFractionDigits:1}).format(v||0)}
-function getSelectedFilters(){return{startDate:browserDate(document.getElementById("filter-start-date").value),endDate:browserDate(document.getElementById("filter-end-date").value),entity:document.getElementById("filter-entity-type").value||"الكل",status:document.getElementById("filter-status").value||"الكل",purpose:document.getElementById("filter-purpose").value||"الكل",dataType:document.getElementById("filter-data-type").value||"الكل",department:document.getElementById("filter-department").value||"الكل"}}
-function filterRowsState(rows,filters,ignore){ignore=ignore||[];return rows.filter((r)=>{if(!ignore.includes("startDate")&&filters.startDate&&(!r.requestDate||r.requestDate<filters.startDate))return false;if(!ignore.includes("endDate")&&filters.endDate&&(!r.requestDate||r.requestDate>filters.endDate))return false;if(!ignore.includes("entity")&&filters.entity!=="الكل"&&r.entityType!==filters.entity)return false;if(!ignore.includes("status")&&filters.status!=="الكل"&&r.status!==filters.status)return false;if(!ignore.includes("purpose")&&filters.purpose!=="الكل"&&r.purpose!==filters.purpose)return false;if(!ignore.includes("dataType")&&filters.dataType!=="الكل"&&((filters.status==="مرفوض"?mapRejectedReason(r.dataType):filters.status==="معلق عند مقدم الطلب"?mapWaitingReason(r):r.dataType)!==filters.dataType))return false;if(!ignore.includes("department")&&filters.department!=="الكل"&&r.department!==filters.department)return false;return true;});}
-function allowedDataTypes(rows,filters){if(filters.status==="مرفوض") return rows.map((r)=>mapRejectedReason(r.dataType)).filter((v)=>v); if(filters.status==="معلق عند مقدم الطلب") return rows.map((r)=>mapWaitingReason(r)).filter((v)=>v); return rows.map((r)=>r.dataType).filter((v)=>v&&v!=="غير محدد").filter((v)=>!NON_DATA_TYPES.has(v));}
+function getSelectedFilters(){const requesterRaw=document.getElementById("filter-requester").value||"";return{startDate:browserDate(document.getElementById("filter-start-date").value),endDate:browserDate(document.getElementById("filter-end-date").value),entity:document.getElementById("filter-entity-type").value||"الكل",status:document.getElementById("filter-status").value||"الكل",purpose:document.getElementById("filter-purpose").value||"الكل",dataType:document.getElementById("filter-data-type").value||"الكل",department:document.getElementById("filter-department").value||"الكل",requesterRaw:requesterRaw,requesterTerms:parseRequesterTerms(requesterRaw)}}
+function filterRowsState(rows,filters,ignore){ignore=ignore||[];return rows.filter((r)=>{const activeDataType=resolveDataFilterValue(filters,r);if(!ignore.includes("startDate")&&filters.startDate&&(!r.requestDate||r.requestDate<filters.startDate))return false;if(!ignore.includes("endDate")&&filters.endDate&&(!r.requestDate||r.requestDate>filters.endDate))return false;if(!ignore.includes("entity")&&filters.entity!=="الكل"&&r.entityType!==filters.entity)return false;if(!ignore.includes("status")&&filters.status!=="الكل"&&r.status!==filters.status)return false;if(!ignore.includes("purpose")&&filters.purpose!=="الكل"&&r.purpose!==filters.purpose)return false;if(!ignore.includes("dataType")&&filters.dataType!=="الكل"&&activeDataType!==filters.dataType)return false;if(!ignore.includes("department")&&filters.department!=="الكل"&&r.department!==filters.department)return false;if(!ignore.includes("requester")&&!requesterMatches(r,filters.requesterTerms))return false;if(!ignore.includes("trend")&&interactiveSelections.trend.size&&!interactiveSelections.trend.has(r.monthLabel))return false;if(!ignore.includes("statusInteractive")&&interactiveSelections.status.size&&!interactiveSelections.status.has(r.status))return false;if(!ignore.includes("entityInteractive")&&interactiveSelections.entity.size&&!interactiveSelections.entity.has(r.entityType))return false;if(!ignore.includes("requesterInteractive")&&interactiveSelections.requester.size&&!interactiveSelections.requester.has(r.requester))return false;if(!ignore.includes("dataTypeInteractive")&&interactiveSelections.dataType.size&&!interactiveSelections.dataType.has(activeDataType))return false;if(!ignore.includes("purposeInteractive")&&interactiveSelections.purpose.size&&!interactiveSelections.purpose.has(r.purpose))return false;if(!ignore.includes("regionInteractive")&&interactiveSelections.region.size&&!interactiveSelections.region.has(r.region))return false;if(!ignore.includes("workloadInteractive")&&interactiveSelections.workload.size){const bucket=responseBucket(r.turnaroundDays);if(!bucket||!interactiveSelections.workload.has(bucket))return false;}return true;});}
+function allowedDataTypes(rows,filters){if(filters.status==="مرفوض") return rows.map((r)=>mapRejectedReason(r)).filter((v)=>v); if(filters.status==="معلق عند مقدم الطلب") return rows.map((r)=>mapWaitingReason(r)).filter((v)=>v); return rows.map((r)=>r.dataType).filter((v)=>v&&v!=="غير محدد").filter((v)=>!NON_DATA_TYPES.has(v));}
 function countByLabel(values){const m=new Map();values.forEach((v)=>{if(v)m.set(v,(m.get(v)||0)+1);});return m;}
 function setDataTypeHeading(rejected){const title=document.getElementById("data-types-title"),desc=document.getElementById("data-types-description");if(!title||!desc)return;title.textContent="أكثر أنواع البيانات طلبًا";if(rejected){desc.textContent="يعرض هذا الرسم الأسباب أو الأوصاف المرتبطة برفض الطلبات.";return}if(getSelectedFilters().status==="معلق عند مقدم الطلب"){desc.textContent="اسباب تعليق الطلب";return}desc.textContent="احصائيات نوع البيانات البيئية المطلوبة.";}
 
 
 
-function mapRejectedReason(value){const v=txt(value); if(v.includes("لاتتوفر لدى الإدارة")||v.includes("غير متوفرة بالإدارة")) return "البيانات المطلوبة لاتتوفر لدى الإدارة"; if(v.includes("لاتتوفر لدى المركز")) return "البيانات المطلوبة لاتتوفر لدى المركز"; return "";}
+function mapRejectedReason(input){const v=txt(typeof input==="string"?input:(((input&&input.dataType)||"")+" "+((input&&input.requestedData)||""))); if(v.includes("لاتوجد محطة جودة هواء")) return "لاتوجد محطة جودة هواء في الموقع المطلوب"; if(v.includes("الحد الأدنى من الاكتمال")) return "البيانات المطلوبة لاتحقق الحد الأدنى من الاكتمال اللازم للمشاركة"; if(v.includes("لم يتم تحديد نوع البيانات")||v.includes("معلق في انتظار تحديد نوع البيانات")) return "لم يتم تحديد نوع البيانات"; if(v.includes("لاتتوفر لدى الإدارة")||v.includes("غير متوفرة بالإدارة")) return "البيانات المطلوبة لاتتوفر لدى الإدارة"; if(v.includes("لاتتوفر لدى المركز")) return "البيانات المطلوبة لاتتوفر لدى المركز"; return "";}
 
 
 
 
-function mapWaitingReason(row){const v=txt((row&&row.dataType)||"")+" "+txt((row&&row.requestedData)||""); if(v.includes("غير واضح")) return "طلب البيانات غير واضح"; return "لم يتم تحديد نوع البيانات";}
+function mapWaitingReason(row){const v=txt((row&&row.dataType)||"")+" "+txt((row&&row.requestedData)||""); if(v.includes("غير واضح")) return "طلب البيانات غير واضح"; if(v.includes("النموذج")||v.includes("تعبئة")) return "لم يتم تعبئة النموذج"; return "لم يتم تعبئة النموذج";}
 
 
 
+
+function fillRequesterOptions(values){const list=document.getElementById("requester-options");if(!list)return;const opts=[...new Set(values.filter((v)=>v&&v!=="الكل"&&v!=="غير محدد"))].sort((a,b)=>a.localeCompare(b,"ar"));list.innerHTML=opts.map((x)=>"<option value=\""+esc(x)+"\"></option>").join("");}
+function parseRequesterTerms(value){return [...new Set(String(value||"").replace(/[،,]/g,"|").split("|").map((x)=>x.trim()).filter((x)=>x))];}
+
+function requesterMatches(row,terms){if(!terms||!terms.length)return true;const name=txt(row.requester);return terms.some((term)=>name===term||name.includes(term));}
+function toggleInteractiveFilter(key,value){const set=interactiveSelections[key];if(!set||!value)return;set.has(value)?set.delete(value):set.add(value);}
+function isInteractiveActive(key,value){const set=interactiveSelections[key];return !!set&&set.has(value);}function bindChartInteractions(){const chartMap={"trend-chart":"trend","status-chart":"status","entity-chart":"entity","requesters-chart":"requester","data-types-chart":"dataType","purpose-chart":"purpose","regions-chart":"region","workload-chart":"workload"};Object.entries(chartMap).forEach(([id,key])=>{charts[id].off("click");charts[id].on("click",(params)=>{const source=params&&params.data&&params.data.name!==undefined?params.data.name:params.name;const value=txt(source);if(!value)return;toggleInteractiveFilter(key,key==="trend"&&params.data&&params.data.monthLabel?params.data.monthLabel:value);applyFilters();});});}
+function resolveDataFilterValue(filters,row){return filters.status==="مرفوض"?mapRejectedReason(row):filters.status==="معلق عند مقدم الطلب"?mapWaitingReason(row):row.dataType;}
