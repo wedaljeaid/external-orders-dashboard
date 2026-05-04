@@ -60,7 +60,7 @@ async function loadData(){
     const text=await res.text();
     if(!res.ok||!text||text.trim().startsWith("<!DOCTYPE html")) throw new Error("csv");
     /* master=normalize(Papa.parse(text,{header:true,skipEmptyLines:true}).data);
-    source.textContent="المصدر المباشر: Google Sheets"; */
+    source.textContent="المصدر : Google Sheets"; */
     source.classList.remove("muted");
   }catch(e){
     const res=await fetch(CFG.fallbackDataUrl,{cache:"no-store"});
