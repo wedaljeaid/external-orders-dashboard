@@ -54,7 +54,7 @@ function normalize(rows){
 async function loadData(){
   const source=document.getElementById("source-status");
   const refresh=document.getElementById("refresh-status");
-  source.textContent="جارٍ جلب البيانات";
+  source.textContent="جار جلب البيانات";
   try{
     const res=await fetch(liveUrl(),{cache:"no-store"});
     const text=await res.text();
