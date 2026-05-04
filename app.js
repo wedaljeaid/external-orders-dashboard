@@ -52,22 +52,16 @@ function normalize(rows){
   }).filter((r)=>r.requestDate||r.status!=="غير محدد");
 }
 async function loadData(){
-  const source=document.getElementById("source-status");
   const refresh=document.getElementById("refresh-status");
-  source.textContent="جار جلب البيانات";
   try{
     const res=await fetch(liveUrl(),{cache:"no-store"});
     const text=await res.text();
     if(!res.ok||!text||text.trim().startsWith("<!DOCTYPE html")) throw new Error("csv");
     master=normalize(Papa.parse(text,{header:true,skipEmptyLines:true}).data);
-    source.textContent="المصدر : Google Sheets"; 
-    source.classList.remove("muted");
   }catch(e){
     const res=await fetch(CFG.fallbackDataUrl,{cache:"no-store"});
     const json=await res.json();
     master=normalize(json.records||[]);
-    source.textContent="المصدر الحالي: نسخة احتياطية محلية";
-    source.classList.add("muted");
   }
   refresh.textContent="آخر تحديث: "+new Date().toLocaleString("ar-SA");
   fillFilters();
@@ -149,28 +143,21 @@ async function fetchRowsFromEndpoint(){
   return payload.records||payload.data||payload;
 }
 async function loadData(){
-  const source=document.getElementById("source-status"), refresh=document.getElementById("refresh-status");
-  source.textContent="جارٍ جلب البيانات";
+  const refresh=document.getElementById("refresh-status");
   try{
     const endpointRows=await fetchRowsFromEndpoint();
     if(endpointRows){
       master=normalize(endpointRows);
-      source.textContent="المصدر المباشر: "+(CFG.sourceLabel||"Google Sheets API");
-      source.classList.remove("muted");
     } else {
       const res=await fetch(liveUrl(),{cache:"no-store"});
       const text=await res.text();
       if(!res.ok||!text||text.trim().startsWith("<!DOCTYPE html")) throw new Error("csv");
       master=normalize(Papa.parse(text,{header:true,skipEmptyLines:true}).data);
-      source.textContent="المصدر المباشر: Google Sheets";
-      source.classList.remove("muted");
     }
   } catch(e){
     const res=await fetch(CFG.fallbackDataUrl,{cache:"no-store"});
     const json=await res.json();
     master=normalize(json.records||[]);
-    source.textContent="المصدر الحالي: نسخة احتياطية محلية";
-    source.classList.add("muted");
   }
   refresh.textContent="آخر تحديث: "+new Date().toLocaleString("ar-SA");
   fillFilters();
