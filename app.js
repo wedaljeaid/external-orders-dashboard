@@ -1,6 +1,8 @@
 ﻿
 const CFG={googleSheetId:"1LM7ZYKm8PNG8kRKx5i5rWTGdY5csSlhO",googleSheetGid:"0",publishedCsvUrl:"",autoRefreshMinutes:15,fallbackDataUrl:"./data/external_orders.json",...(window.DASHBOARD_CONFIG||{})};
 const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+const CLEAN_REQUEST_DATE_COLUMNS=["تاريخ استلام الطلب نظيف"];
+const CLEAN_DELIVERY_DATE_COLUMNS=["تاريخ تسليم الطلب نظيف","تالريخ تسليم الطلب نظيف"];
 const COLORS={"تم التسليم":"#2d9c8f","مرفوض":"#d95d39","تحت الاجراء":"#f2a65a","معلق عند مقدم الطلب":"#6c8aa0","غير محدد":"#9db4c0"};
 const charts={}; let master=[],filtered=[]; const interactiveSelections={trend:new Set(),status:new Set(),entity:new Set(),requester:new Set(),dataType:new Set(),purpose:new Set(),region:new Set(),workload:new Set()};
 document.addEventListener("DOMContentLoaded",init);
@@ -8,18 +10,23 @@ async function init(){initCharts();bindFilters();bindChartInteractions();await l
 function liveUrl(){return CFG.publishedCsvUrl||`https://docs.google.com/spreadsheets/d/${CFG.googleSheetId}/export?format=csv&gid=${CFG.googleSheetGid||0}`;}
 function txt(v){return String(v||"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim()||"غير محدد";}
 function val(row,key){const direct=row[key]; if(direct!==undefined) return direct; const wanted=txt(key); const found=Object.keys(row).find((k)=>txt(k)===wanted); return found?row[found]:"";}
-function parseDate(raw){
+function valAny(row,keys){
+  for(const key of keys){const value=val(row,key); if(value!==undefined&&String(value).trim()) return value;}
+  return "";
+}
+function todayDate(){
+  const now=new Date();
+  return makeDate(now.getFullYear(),now.getMonth()+1,now.getDate());
+}
+function parseCleanDate(raw,options){
   const s=txt(raw);
   if(!s||s==="غير محدد"||s==="-") return null;
-  if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
-    const parts=s.split("-").map(Number);
-    return makeDate(parts[0],parts[1],parts[2]);
-  }
-  const p=s.split(/[/-]/).map(Number);
-  if(p.length!==3||p.some(Number.isNaN)) return null;
-  let d,m,y;
-  if(String(p[0]).length===4){[y,m,d]=p;} else if(p[0]>12){[d,m,y]=p;} else if(p[1]>12){[m,d,y]=p;} else {[d,m,y]=p;}
-  return makeDate(y,m,d);
+  const match=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match) return null;
+  const date=makeDate(Number(match[1]),Number(match[2]),Number(match[3]));
+  if(!date) return null;
+  if(!(options&&options.allowFuture)&&date>todayDate()) return null;
+  return date;
 }
 function makeDate(y,m,d){
   if(!y||!m||!d) return null;
@@ -35,9 +42,9 @@ function bucket(days){
 }
 function normalize(rows){
   return rows.map((row)=>{
-    const reqText=txt(val(row,"تاريخ استلام الطلب"));
-    const delText=txt(val(row,"تاريخ تسليم الطلب"));
-    const req=parseDate(reqText), del=parseDate(delText);
+    const reqText=txt(valAny(row,CLEAN_REQUEST_DATE_COLUMNS));
+    const delText=txt(valAny(row,CLEAN_DELIVERY_DATE_COLUMNS));
+    const req=parseCleanDate(reqText), del=parseCleanDate(delText);
     const days=req&&del?Math.round((del-req)/86400000):null;
     return {
       requestDate:req, deliveryDate:del, requestDateText:reqText, deliveryDateText:delText,
@@ -88,7 +95,7 @@ function fillSelect(id,values){
   el.innerHTML=opts.map((x)=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
   el.value=opts.includes(cur)?cur:"الكل";
 }
-function browserDate(v){if(!v) return null; const p=v.split("-").map(Number); return new Date(p[0],p[1]-1,p[2]);}
+function browserDate(v){return parseCleanDate(v,{allowFuture:true});}
 function applyFilters(){
   const s=browserDate(document.getElementById("filter-start-date").value), e=browserDate(document.getElementById("filter-end-date").value);
   const entity=document.getElementById("filter-entity-type").value, status=document.getElementById("filter-status").value, purpose=document.getElementById("filter-purpose").value, dataType=document.getElementById("filter-data-type").value;
@@ -127,9 +134,9 @@ function isOpenStatus(status){return status==="تحت الاجراء"||status===
 function bucket(days,status){if(days==null) return isOpenStatus(status)?"طلبات مفتوحة":"تواريخ أو إغلاقات ناقصة"; if(days<0) return "تواريخ غير متسقة"; if(days<=7) return "استجابة خلال 7 أيام"; if(days<=30) return "استجابة خلال 8-30 يومًا"; return "استجابة بعد أكثر من 30 يومًا";}
 function normalize(rows){
   return rows.map((row)=>{
-    const reqText=txt(val(row,"تاريخ استلام الطلب"));
-    const delText=txt(val(row,"تاريخ تسليم الطلب"));
-    const req=parseDate(reqText), del=parseDate(delText);
+    const reqText=txt(valAny(row,CLEAN_REQUEST_DATE_COLUMNS));
+    const delText=txt(valAny(row,CLEAN_DELIVERY_DATE_COLUMNS));
+    const req=parseCleanDate(reqText), del=parseCleanDate(delText);
     const status=txt(val(row,"حالة الطلب"));
     const days=req&&del?Math.round((del-req)/86400000):null;
     return {requestDate:req,deliveryDate:del,requestDateText:reqText,deliveryDateText:delText,status,entityType:txt(val(row,"جهة الطلب")),requestType:txt(val(row,"نوع الطلب")),requester:txt(val(row,"اسم طالب البيانات (فرد أو جهة )")),submitter:txt(val(row,"اسم مقدم الطلب")),dataType:txt(val(row,"نوع البيانات المطلوبة")),purpose:txt(val(row,"الغرض من البيانات المطلوبة")),requestedData:txt(val(row,"البيانات المطلوبة")),department:txt(val(row,"اسم الإدارة")),provider:txt(val(row,"مزود البيانات")),subRequestType:txt(val(row,"نوع الطلب 2")),region:txt(val(row,"المحافظة ")).replace(/^المملكة$/,"كامل المملكة"),turnaroundDays:days,turnaroundBucket:bucket(days,status),monthKey:req?(req.getFullYear()+"-"+String(req.getMonth()+1).padStart(2,"0")):"غير معروف",monthLabel:req?(MONTHS[req.getMonth()]+" "+req.getFullYear()):"غير معروف"};
