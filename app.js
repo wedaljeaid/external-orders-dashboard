@@ -129,7 +129,7 @@ function plotPie(id,data,rose){charts[id].setOption({tooltip:{trigger:"item"},le
 function plotBar(id,data,color,horizontal,limit){const labels=data.map((x)=>limit?short(x[0],limit):x[0]), values=data.map((x)=>x[1]); charts[id].setOption({tooltip:{trigger:"axis",axisPointer:{type:"shadow"}},grid:{top:10,left:18,right:14,bottom:horizontal?12:48,containLabel:true},xAxis:horizontal?{type:"value",axisLabel:{color:"#5c7382"}}:{type:"category",data:labels,axisLabel:{color:"#5c7382",rotate:horizontal?0:22}},yAxis:horizontal?{type:"category",data:labels,axisLabel:{color:"#153243"}}:{type:"value",axisLabel:{color:"#5c7382"}},series:[{type:"bar",data:values,itemStyle:{color:color,borderRadius:[12,12,12,12]}}]});}
 if (typeof CFG.dataEndpoint === "undefined") CFG.dataEndpoint = "";
 if (typeof CFG.sourceLabel === "undefined") CFG.sourceLabel = "Google Sheets";
-function isRespondedStatus(status){return status==="تم التسليم"||status==="مرفوض";}
+function isRespondedStatus(status){return status==="تم التسليم"||status==="مرفوض"||status==="معلق عند مقدم الطلب";}
 function isOpenStatus(status){return status==="تحت الاجراء"||status==="معلق عند مقدم الطلب";}
 function bucket(days,status){if(days==null) return isOpenStatus(status)?"طلبات مفتوحة":"تواريخ أو إغلاقات ناقصة"; if(days<0) return "تواريخ غير متسقة"; if(days<=7) return "استجابة خلال 7 أيام"; if(days<=30) return "استجابة خلال 8-30 يومًا"; return "استجابة بعد أكثر من 30 يومًا";}
 function normalize(rows){
@@ -187,7 +187,7 @@ function render(rows,filters){
   const dataType=showRejectedReasons?countByLabel(rows.map((r)=>mapRejectedReason(r)).filter((v)=>v)):showWaitingType?countByLabel(rows.map((r)=>mapWaitingReason(r)).filter((v)=>v)):countBy(rows.filter((r)=>!NON_DATA_TYPES.has(r.dataType)),"dataType");
 
   const responded=rows.filter((r)=>isRespondedStatus(r.status)), delivered=rows.filter((r)=>r.status==="تم التسليم"), rejected=rows.filter((r)=>r.status==="مرفوض"), inProgress=rows.filter((r)=>r.status==="تحت الاجراء"), waitingSubmitter=rows.filter((r)=>r.status==="معلق عند مقدم الطلب");
-  const valid=responded.filter((r)=>Number.isFinite(r.turnaroundDays)&&r.turnaroundDays>=0);
+  const valid=[...delivered,...rejected].filter((r)=>Number.isFinite(r.turnaroundDays)&&r.turnaroundDays>=0);
   const excluded=responded.length-valid.length;
   const completion=rows.length?(responded.length/rows.length):0;
   const tr=trend(rows), topPurpose=topEntry(purpose), topRequester=topEntry(requester), topData=topEntry(dataType), topRegion=topEntry(region), topDepartment=topEntry(departmentMap), topMonth=[...tr].sort((a,b)=>b.count-a.count)[0];
@@ -195,7 +195,7 @@ function render(rows,filters){
   const departmentBreakdown=["طلبات البيانات البيئية","طلبات نمذجة البيانات البيئية"].map((label)=>label+" ("+fmtNum(departmentMap.get(label)||0)+")").join(" | ");
   const kpis=[];
   kpis.push(["إجمالي الطلبات",fmtNum(rows.length),"إجمالي السجلات ضمن التصفية الحالية.",departmentBreakdown]);
-  kpis.push(["نسبة الإنجاز",fmtPct(completion),"الطلبات التي تم الاستجابة لها: تم التسليم ("+fmtNum(delivered.length)+") | مرفوض ("+fmtNum(rejected.length)+")"]);
+  kpis.push(["نسبة الإنجاز",fmtPct(completion),"الطلبات التي تم الاستجابة لها: تم التسليم ("+fmtNum(delivered.length)+") | مرفوض ("+fmtNum(rejected.length)+") | معلق عند مقدم الطلب ("+fmtNum(waitingSubmitter.length)+")"]);
   kpis.push(["طلبات قيد المتابعة",fmtNum(inProgress.length+waitingSubmitter.length),"تحت الإجراء: "+fmtNum(inProgress.length)+" | معلقة عند مقدم الطلب: "+fmtNum(waitingSubmitter.length)+"."]);
   kpis.push(["متوسط المعالجة",valid.length?(fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يوم"):"غير متاح","متوسط زمن المعالجة يبلغ "+fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يومًا استنادًا إلى "+fmtNum(valid.length)+" طلبًا."]);
   kpis.push(["الإدارة الأعلى استقبالًا",topDepartment.label,fmtNum(topDepartment.value)+" طلبًا ضمن نطاق التصفية الحالي."]);
@@ -209,7 +209,7 @@ function render(rows,filters){
   summary.push("<div class=\"summary-item\"><strong>تمركز الطلب والخدمة</strong><span>يبرز "+esc(topDepartment.label)+" كأعلى إدارة استقبالًا للطلبات، مع تمركز جغرافي أكبر في "+esc(topRegion.label)+".</span></div>");
   document.getElementById("executive-summary").innerHTML=summary.join("");
   const insights=[];
-  insights.push(["الإنجاز","يشمل الإنجاز التسليم والرفض معًا باعتبارهما استجابة رسمية للطلب، مما يمنحنا قراءة أدق لحجم الطلبات المغلقة فعليًا"]);
+  insights.push(["الإنجاز","يشمل الإنجاز االطلبات التي تم تسليمها، كذلك الطلبات التي تم الاستجابة لها سواء بالرفض او طلب التوضيح من مقدم الطلب، مما يمنحنا قراءة أدق لحجم الطلبات المغلقة فعليًا"]);
   insights.push(["المتابعة الحالية","عدد الطلبات المفتوحة حاليًا يبلغ "+fmtNum(inProgress.length+waitingSubmitter.length)+" طلبًا، وتتركز بين طلبات تحت الإجراء ومعلقة عند مقدم الطلب مما يعكس الاحتياج إلى متابعة تشغيلية مستمرة"]);
   insights.push(["كفاءة زمن المعالجة",valid.length?("متوسط زمن المعالجة يبلغ "+fmtOne(avg(valid.map((r)=>r.turnaroundDays)))+" يومًا استنادًا إلى "+fmtNum(valid.length)+" طلبًا."):"لا توجد طلبات مكتملة التواريخ تكفي لحساب متوسط المعالجة في نطاق التصفية الحالي."]);
   insights.push(["أعلى نشاط زمني",topMonth?("سُجل أعلى نشاط زمني في "+esc(topMonth.label)+" بعدد "+fmtNum(topMonth.count)+" طلبًا، ما يجعله شهر الذروة في السلسلة الحالية."):"لا توجد تواريخ استلام كافية لإظهار شهر الذروة ضمن التصفية الحالية."]);
