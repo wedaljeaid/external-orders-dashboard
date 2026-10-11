@@ -1,4 +1,4 @@
-﻿
+
 var fso = new ActiveXObject("Scripting.FileSystemObject");
 
 function quote(value) {
@@ -28,6 +28,37 @@ function stringifyObject(obj) {
 
   return "{" + parts.join(",") + "}";
 }
+
+function pad2(value) {
+  return value < 10 ? "0" + value : String(value);
+}
+
+function isoNow() {
+  var date = new Date();
+  return (
+    date.getUTCFullYear() +
+    "-" +
+    pad2(date.getUTCMonth() + 1) +
+    "-" +
+    pad2(date.getUTCDate()) +
+    "T" +
+    pad2(date.getUTCHours()) +
+    ":" +
+    pad2(date.getUTCMinutes()) +
+    ":" +
+    pad2(date.getUTCSeconds()) +
+    "Z"
+  );
+}
+
+function isBlankValue(value) {
+  if (value === null || value === undefined) {
+    return true;
+  }
+
+  return String(value).replace(/\u00a0/g, " ").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "") === "";
+}
+
 function exportWorkbook(inputPath, outputPath) {
   var absoluteInput = fso.GetAbsolutePathName(inputPath);
   var absoluteOutput = fso.GetAbsolutePathName(outputPath);
@@ -50,11 +81,18 @@ function exportWorkbook(inputPath, outputPath) {
   var rows = [];
   while (!recordset.EOF) {
     var row = {};
+    var hasData = false;
     for (var i = 0; i < recordset.Fields.Count; i += 1) {
       var field = recordset.Fields(i);
-      row[field.Name] = field.Value === null ? "" : String(field.Value);
+      var value = field.Value === null ? "" : String(field.Value);
+      row[field.Name] = value;
+      if (!isBlankValue(value)) {
+        hasData = true;
+      }
     }
-    rows.push(stringifyObject(row));
+    if (hasData) {
+      rows.push(stringifyObject(row));
+    }
     recordset.MoveNext();
   }
 
@@ -63,7 +101,7 @@ function exportWorkbook(inputPath, outputPath) {
   var payload =
     "{\n" +
     '  "generatedAt": ' +
-    quote(new Date().toISOString()) +
+    quote(isoNow()) +
     ",\n" +
     '  "records": [\n    ' +
     rows.join(",\n    ") +
