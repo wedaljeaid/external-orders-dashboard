@@ -3,30 +3,65 @@ const CFG={googleSheetId:"1LM7ZYKm8PNG8kRKx5i5rWTGdY5csSlhO",googleSheetGid:"0",
 const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const CLEAN_REQUEST_DATE_COLUMNS=["تاريخ استلام الطلب نظيف"];
 const CLEAN_DELIVERY_DATE_COLUMNS=["تاريخ تسليم الطلب نظيف","تالريخ تسليم الطلب نظيف"];
+const LEGACY_REQUEST_DATE_COLUMNS=["تاريخ استلام الطلب"];
+const LEGACY_DELIVERY_DATE_COLUMNS=["تاريخ تسليم الطلب"];
+const ALL_REQUEST_TYPES_LABEL="جميع الطلبات";
+const REQUEST_TYPE_OPTIONS=[ALL_REQUEST_TYPES_LABEL,"داخل المركز","خارج المركز"];
 const COLORS={"تم التسليم":"#2d9c8f","مرفوض":"#d95d39","تحت الاجراء":"#f2a65a","معلق عند مقدم الطلب":"#6c8aa0","غير محدد":"#9db4c0"};
 const charts={}; let master=[],filtered=[]; const interactiveSelections={trend:new Set(),status:new Set(),entity:new Set(),requester:new Set(),dataType:new Set(),purpose:new Set(),region:new Set(),workload:new Set()};
 document.addEventListener("DOMContentLoaded",init);
 async function init(){initCharts();bindFilters();bindChartInteractions();await loadData();if(CFG.autoRefreshMinutes>0){setInterval(loadData,CFG.autoRefreshMinutes*60000);}}
 function liveUrl(){return CFG.publishedCsvUrl||`https://docs.google.com/spreadsheets/d/${CFG.googleSheetId}/export?format=csv&gid=${CFG.googleSheetGid||0}`;}
-function txt(v){return String(v||"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim()||"غير محدد";}
+function rawText(v){return String(v??"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim();}
+function txt(v){return rawText(v)||"غير محدد";}
 function val(row,key){const direct=row[key]; if(direct!==undefined) return direct; const wanted=txt(key); const found=Object.keys(row).find((k)=>txt(k)===wanted); return found?row[found]:"";}
 function valAny(row,keys){
-  for(const key of keys){const value=val(row,key); if(value!==undefined&&String(value).trim()) return value;}
+  for(const key of keys){const value=val(row,key); if(value!==undefined&&rawText(value)) return value;}
   return "";
 }
+function isBlankValue(value){return rawText(value)==="";}
+function isEmptyRow(row){return !row||Object.keys(row).every((key)=>isBlankValue(row[key]));}
 function todayDate(){
   const now=new Date();
   return makeDate(now.getFullYear(),now.getMonth()+1,now.getDate());
 }
-function parseCleanDate(raw,options){
-  const s=txt(raw);
-  if(!s||s==="غير محدد"||s==="-") return null;
-  const match=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(!match) return null;
-  const date=makeDate(Number(match[1]),Number(match[2]),Number(match[3]));
+function parseDateValue(raw,options){
+  if(raw instanceof Date&&!Number.isNaN(raw.getTime())) return guardSourceDate(makeDate(raw.getFullYear(),raw.getMonth()+1,raw.getDate()),options);
+  if(typeof raw==="number"&&Number.isFinite(raw)) return guardSourceDate(excelSerialDate(raw),options);
+  const s=rawText(raw);
+  if(!s||s==="غير محدد"||s==="-"||s.startsWith("#")) return null;
+  if(/^\d+(\.\d+)?$/.test(s)){
+    const serial=Number(s);
+    if(serial>20000&&serial<80000) return guardSourceDate(excelSerialDate(serial),options);
+  }
+  const datePart=s.split(/[T\s]/)[0];
+  let match=datePart.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if(match) return guardSourceDate(makeDate(Number(match[1]),Number(match[2]),Number(match[3])),options);
+  const p=datePart.split(/[/-]/).map(Number);
+  if(p.length!==3||p.some(Number.isNaN)) return null;
+  let d,m,y;
+  if(String(p[0]).length===4){[y,m,d]=p;} else if(p[0]>12){[d,m,y]=p;} else if(p[1]>12){[m,d,y]=p;} else {[d,m,y]=p;}
+  if(y<100) y+=2000;
+  return guardSourceDate(makeDate(y,m,d),options);
+}
+function parseCleanDate(raw,options){return parseDateValue(raw,options);}
+function excelSerialDate(serial){
+  const whole=Math.floor(Number(serial));
+  const date=new Date(Date.UTC(1899,11,30)+whole*86400000);
+  return makeDate(date.getUTCFullYear(),date.getUTCMonth()+1,date.getUTCDate());
+}
+function guardSourceDate(date,options){
   if(!date) return null;
   if(!(options&&options.allowFuture)&&date>todayDate()) return null;
   return date;
+}
+function sourceDate(row,cleanColumns,legacyColumns){
+  const cleanRaw=valAny(row,cleanColumns);
+  const cleanDate=parseDateValue(cleanRaw);
+  if(cleanDate) return {date:cleanDate,text:rawText(cleanRaw)};
+  const legacyRaw=valAny(row,legacyColumns);
+  const legacyDate=parseDateValue(legacyRaw);
+  return {date:legacyDate,text:rawText(cleanRaw)||rawText(legacyRaw)};
 }
 function makeDate(y,m,d){
   if(!y||!m||!d) return null;
@@ -41,10 +76,11 @@ function bucket(days){
   return "أكثر من 30 يومًا";
 }
 function normalize(rows){
-  return rows.map((row)=>{
-    const reqText=txt(valAny(row,CLEAN_REQUEST_DATE_COLUMNS));
-    const delText=txt(valAny(row,CLEAN_DELIVERY_DATE_COLUMNS));
-    const req=parseCleanDate(reqText), del=parseCleanDate(delText);
+  return rows.filter((row)=>!isEmptyRow(row)).map((row)=>{
+    const reqInfo=sourceDate(row,CLEAN_REQUEST_DATE_COLUMNS,LEGACY_REQUEST_DATE_COLUMNS);
+    const delInfo=sourceDate(row,CLEAN_DELIVERY_DATE_COLUMNS,LEGACY_DELIVERY_DATE_COLUMNS);
+    const req=reqInfo.date, del=delInfo.date;
+    const reqText=txt(reqInfo.text), delText=txt(delInfo.text);
     const days=req&&del?Math.round((del-req)/86400000):null;
     return {
       requestDate:req, deliveryDate:del, requestDateText:reqText, deliveryDateText:delText,
@@ -75,18 +111,27 @@ async function loadData(){
   applyFilters();
 }
 function bindFilters(){
-  ["filter-start-date","filter-end-date","filter-entity-type","filter-status","filter-purpose","filter-data-type"].forEach((id)=>document.getElementById(id).addEventListener("change",applyFilters));
+  ["filter-start-date","filter-end-date","filter-entity-type","filter-status","filter-request-type","filter-purpose","filter-data-type"].forEach((id)=>document.getElementById(id).addEventListener("change",applyFilters));
   document.getElementById("reset-filters").addEventListener("click",()=>{
     ["filter-start-date","filter-end-date"].forEach((id)=>document.getElementById(id).value="");
     ["filter-entity-type","filter-status","filter-purpose","filter-data-type"].forEach((id)=>document.getElementById(id).value="الكل");
+    document.getElementById("filter-request-type").value=ALL_REQUEST_TYPES_LABEL;
     applyFilters();
   });
 }
 function fillFilters(){
   fillSelect("filter-entity-type",master.map((x)=>x.entityType));
   fillSelect("filter-status",master.map((x)=>x.status));
+  fillRequestTypeFilter();
   fillSelect("filter-purpose",master.map((x)=>x.purpose));
   fillSelect("filter-data-type",master.map((x)=>x.dataType));
+}
+function fillRequestTypeFilter(){
+  const el=document.getElementById("filter-request-type");
+  if(!el) return;
+  const cur=el.value||ALL_REQUEST_TYPES_LABEL;
+  el.innerHTML=REQUEST_TYPE_OPTIONS.map((x)=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
+  el.value=REQUEST_TYPE_OPTIONS.includes(cur)?cur:ALL_REQUEST_TYPES_LABEL;
 }
 function fillSelect(id,values){
   const el=document.getElementById(id);
@@ -98,12 +143,13 @@ function fillSelect(id,values){
 function browserDate(v){return parseCleanDate(v,{allowFuture:true});}
 function applyFilters(){
   const s=browserDate(document.getElementById("filter-start-date").value), e=browserDate(document.getElementById("filter-end-date").value);
-  const entity=document.getElementById("filter-entity-type").value, status=document.getElementById("filter-status").value, purpose=document.getElementById("filter-purpose").value, dataType=document.getElementById("filter-data-type").value;
+  const entity=document.getElementById("filter-entity-type").value, status=document.getElementById("filter-status").value, requestType=document.getElementById("filter-request-type").value, purpose=document.getElementById("filter-purpose").value, dataType=document.getElementById("filter-data-type").value;
   filtered=master.filter((r)=>{
     if(s&&(!r.requestDate||r.requestDate<s)) return false;
     if(e&&(!r.requestDate||r.requestDate>e)) return false;
     if(entity!=="الكل"&&r.entityType!==entity) return false;
     if(status!=="الكل"&&r.status!==status) return false;
+    if(requestType!==ALL_REQUEST_TYPES_LABEL&&r.requestType!==requestType) return false;
     if(purpose!=="الكل"&&r.purpose!==purpose) return false;
     if(dataType!=="الكل"&&r.dataType!==dataType) return false;
     return true;
@@ -133,10 +179,11 @@ function isRespondedStatus(status){return status==="تم التسليم"||status
 function isOpenStatus(status){return status==="تحت الاجراء"||status==="معلق عند مقدم الطلب";}
 function bucket(days,status){if(days==null) return isOpenStatus(status)?"طلبات مفتوحة":"تواريخ أو إغلاقات ناقصة"; if(days<0) return "تواريخ غير متسقة"; if(days<=7) return "استجابة خلال 7 أيام"; if(days<=30) return "استجابة خلال 8-30 يومًا"; return "استجابة بعد أكثر من 30 يومًا";}
 function normalize(rows){
-  return rows.map((row)=>{
-    const reqText=txt(valAny(row,CLEAN_REQUEST_DATE_COLUMNS));
-    const delText=txt(valAny(row,CLEAN_DELIVERY_DATE_COLUMNS));
-    const req=parseCleanDate(reqText), del=parseCleanDate(delText);
+  return rows.filter((row)=>!isEmptyRow(row)).map((row)=>{
+    const reqInfo=sourceDate(row,CLEAN_REQUEST_DATE_COLUMNS,LEGACY_REQUEST_DATE_COLUMNS);
+    const delInfo=sourceDate(row,CLEAN_DELIVERY_DATE_COLUMNS,LEGACY_DELIVERY_DATE_COLUMNS);
+    const req=reqInfo.date, del=delInfo.date;
+    const reqText=txt(reqInfo.text), delText=txt(delInfo.text);
     const status=txt(val(row,"حالة الطلب"));
     const days=req&&del?Math.round((del-req)/86400000):null;
     return {requestDate:req,deliveryDate:del,requestDateText:reqText,deliveryDateText:delText,status,entityType:txt(val(row,"جهة الطلب")),requestType:txt(val(row,"نوع الطلب")),requester:txt(val(row,"اسم طالب البيانات (فرد أو جهة )")),submitter:txt(val(row,"اسم مقدم الطلب")),dataType:txt(val(row,"نوع البيانات المطلوبة")),purpose:txt(val(row,"الغرض من البيانات المطلوبة")),requestedData:txt(val(row,"البيانات المطلوبة")),department:txt(val(row,"اسم الإدارة")),provider:txt(val(row,"مزود البيانات")),subRequestType:txt(val(row,"نوع الطلب 2")),region:txt(val(row,"المحافظة ")).replace(/^المملكة$/,"كامل المملكة"),turnaroundDays:days,turnaroundBucket:bucket(days,status),monthKey:req?(req.getFullYear()+"-"+String(req.getMonth()+1).padStart(2,"0")):"غير معروف",monthLabel:req?(MONTHS[req.getMonth()]+" "+req.getFullYear()):"غير معروف"};
@@ -260,13 +307,14 @@ function plotBar(id,data,color,horizontal,limit){
 }
 
 function bindFilters(){
-  ["filter-start-date","filter-end-date","filter-entity-type","filter-status","filter-purpose","filter-data-type","filter-department"].forEach((id)=>{
+  ["filter-start-date","filter-end-date","filter-entity-type","filter-status","filter-request-type","filter-purpose","filter-data-type","filter-department"].forEach((id)=>{
     document.getElementById(id).addEventListener("change", applyFilters);
   });
   document.getElementById("filter-requester").addEventListener("input", applyFilters);
   document.getElementById("reset-filters").addEventListener("click", ()=>{
     ["filter-start-date","filter-end-date"].forEach((id)=>document.getElementById(id).value="");
     ["filter-entity-type","filter-status","filter-purpose","filter-data-type","filter-department"].forEach((id)=>document.getElementById(id).value="الكل");
+    document.getElementById("filter-request-type").value=ALL_REQUEST_TYPES_LABEL;
     document.getElementById("filter-requester").value="";
     Object.values(interactiveSelections).forEach((set)=>set.clear());
     applyFilters();
@@ -276,6 +324,7 @@ function fillFilters(){
   const filters=getSelectedFilters();
   fillSelect("filter-entity-type",filterRowsState(master,filters,["entity"]).map((x)=>x.entityType));
   fillSelect("filter-status",filterRowsState(master,filters,["status"]).map((x)=>x.status));
+  fillRequestTypeFilter();
   fillSelect("filter-purpose",filterRowsState(master,filters,["purpose"]).map((x)=>x.purpose));
   fillRequesterOptions(filterRowsState(master,filters,["requester"]).map((x)=>x.requester));
   fillSelect("filter-data-type",allowedDataTypes(filterRowsState(master,filters,["dataType"]),filters));
@@ -290,8 +339,8 @@ function applyFilters(){
 const NON_DATA_TYPES=new Set(["البيانات المطلوبة غير متوفرة بالإدارة","البيانات المطلوبة لاتتوفر لدى الإدارة","البيانات المطلوبة لاتتوفر لدى المركز","البيانات المطلوبة لاتتوفر لدى الإدارة حاليا","البيانات المطلوبة لاتتوفر لدى المركز حاليا","البيانات المطلوبة لاتتوفر لدى الإدارة حالياً","البيانات المطلوبة لاتتوفر لدى المركز حالياً","معلق في انتظار تحديد نوع البيانات","الطلب غير واضح","طلب البيانات غير واضح","لم يتم تعبئة النموذج","لاتوجد محطة جودة هواء في الموقع المطلوب","البيانات المطلوبة لاتحقق الحد الأدنى من الاكتمال اللازم للمشاركة","لم يتم تحديد نوع البيانات"]);
 function responseBucket(days){if(!Number.isFinite(days)||days<0)return null;if(days<=7)return"خلال 7 أيام";if(days<=30)return"خلال 8-30 يومًا";return"أكثر من 30 يومًا";}
 function fmtOne(v){return new Intl.NumberFormat("ar-SA",{minimumFractionDigits:1,maximumFractionDigits:1}).format(v||0)}
-function getSelectedFilters(){const requesterRaw=document.getElementById("filter-requester").value||"";return{startDate:browserDate(document.getElementById("filter-start-date").value),endDate:browserDate(document.getElementById("filter-end-date").value),entity:document.getElementById("filter-entity-type").value||"الكل",status:document.getElementById("filter-status").value||"الكل",purpose:document.getElementById("filter-purpose").value||"الكل",dataType:document.getElementById("filter-data-type").value||"الكل",department:document.getElementById("filter-department").value||"الكل",requesterRaw:requesterRaw,requesterTerms:parseRequesterTerms(requesterRaw)}}
-function filterRowsState(rows,filters,ignore){ignore=ignore||[];return rows.filter((r)=>{const activeDataType=resolveDataFilterValue(filters,r);if(!ignore.includes("startDate")&&filters.startDate&&(!r.requestDate||r.requestDate<filters.startDate))return false;if(!ignore.includes("endDate")&&filters.endDate&&(!r.requestDate||r.requestDate>filters.endDate))return false;if(!ignore.includes("entity")&&filters.entity!=="الكل"&&r.entityType!==filters.entity)return false;if(!ignore.includes("status")&&filters.status!=="الكل"&&r.status!==filters.status)return false;if(!ignore.includes("purpose")&&filters.purpose!=="الكل"&&r.purpose!==filters.purpose)return false;if(!ignore.includes("dataType")&&filters.dataType!=="الكل"&&activeDataType!==filters.dataType)return false;if(!ignore.includes("department")&&filters.department!=="الكل"&&r.department!==filters.department)return false;if(!ignore.includes("requester")&&!requesterMatches(r,filters.requesterTerms))return false;if(!ignore.includes("trend")&&interactiveSelections.trend.size&&!interactiveSelections.trend.has(r.monthLabel))return false;if(!ignore.includes("statusInteractive")&&interactiveSelections.status.size&&!interactiveSelections.status.has(r.status))return false;if(!ignore.includes("entityInteractive")&&interactiveSelections.entity.size&&!interactiveSelections.entity.has(r.entityType))return false;if(!ignore.includes("requesterInteractive")&&interactiveSelections.requester.size&&!interactiveSelections.requester.has(r.requester))return false;if(!ignore.includes("dataTypeInteractive")&&interactiveSelections.dataType.size&&!interactiveSelections.dataType.has(activeDataType))return false;if(!ignore.includes("purposeInteractive")&&interactiveSelections.purpose.size&&!interactiveSelections.purpose.has(r.purpose))return false;if(!ignore.includes("regionInteractive")&&interactiveSelections.region.size&&!interactiveSelections.region.has(r.region))return false;if(!ignore.includes("workloadInteractive")&&interactiveSelections.workload.size){const bucket=responseBucket(r.turnaroundDays);if(!bucket||!interactiveSelections.workload.has(bucket))return false;}return true;});}
+function getSelectedFilters(){const requesterRaw=document.getElementById("filter-requester").value||"";return{startDate:browserDate(document.getElementById("filter-start-date").value),endDate:browserDate(document.getElementById("filter-end-date").value),entity:document.getElementById("filter-entity-type").value||"الكل",status:document.getElementById("filter-status").value||"الكل",requestType:document.getElementById("filter-request-type").value||ALL_REQUEST_TYPES_LABEL,purpose:document.getElementById("filter-purpose").value||"الكل",dataType:document.getElementById("filter-data-type").value||"الكل",department:document.getElementById("filter-department").value||"الكل",requesterRaw:requesterRaw,requesterTerms:parseRequesterTerms(requesterRaw)}}
+function filterRowsState(rows,filters,ignore){ignore=ignore||[];return rows.filter((r)=>{const activeDataType=resolveDataFilterValue(filters,r);if(!ignore.includes("startDate")&&filters.startDate&&(!r.requestDate||r.requestDate<filters.startDate))return false;if(!ignore.includes("endDate")&&filters.endDate&&(!r.requestDate||r.requestDate>filters.endDate))return false;if(!ignore.includes("entity")&&filters.entity!=="الكل"&&r.entityType!==filters.entity)return false;if(!ignore.includes("status")&&filters.status!=="الكل"&&r.status!==filters.status)return false;if(!ignore.includes("requestType")&&filters.requestType!==ALL_REQUEST_TYPES_LABEL&&r.requestType!==filters.requestType)return false;if(!ignore.includes("purpose")&&filters.purpose!=="الكل"&&r.purpose!==filters.purpose)return false;if(!ignore.includes("dataType")&&filters.dataType!=="الكل"&&activeDataType!==filters.dataType)return false;if(!ignore.includes("department")&&filters.department!=="الكل"&&r.department!==filters.department)return false;if(!ignore.includes("requester")&&!requesterMatches(r,filters.requesterTerms))return false;if(!ignore.includes("trend")&&interactiveSelections.trend.size&&!interactiveSelections.trend.has(r.monthLabel))return false;if(!ignore.includes("statusInteractive")&&interactiveSelections.status.size&&!interactiveSelections.status.has(r.status))return false;if(!ignore.includes("entityInteractive")&&interactiveSelections.entity.size&&!interactiveSelections.entity.has(r.entityType))return false;if(!ignore.includes("requesterInteractive")&&interactiveSelections.requester.size&&!interactiveSelections.requester.has(r.requester))return false;if(!ignore.includes("dataTypeInteractive")&&interactiveSelections.dataType.size&&!interactiveSelections.dataType.has(activeDataType))return false;if(!ignore.includes("purposeInteractive")&&interactiveSelections.purpose.size&&!interactiveSelections.purpose.has(r.purpose))return false;if(!ignore.includes("regionInteractive")&&interactiveSelections.region.size&&!interactiveSelections.region.has(r.region))return false;if(!ignore.includes("workloadInteractive")&&interactiveSelections.workload.size){const bucket=responseBucket(r.turnaroundDays);if(!bucket||!interactiveSelections.workload.has(bucket))return false;}return true;});}
 function allowedDataTypes(rows,filters){if(filters.status==="مرفوض") return rows.map((r)=>mapRejectedReason(r)).filter((v)=>v); if(filters.status==="معلق عند مقدم الطلب") return rows.map((r)=>mapWaitingReason(r)).filter((v)=>v); return rows.map((r)=>r.dataType).filter((v)=>v&&v!=="غير محدد").filter((v)=>!NON_DATA_TYPES.has(v));}
 function countByLabel(values){const m=new Map();values.forEach((v)=>{if(v)m.set(v,(m.get(v)||0)+1);});return m;}
 function setDataTypeHeading(rejected){const title=document.getElementById("data-types-title"),desc=document.getElementById("data-types-description");if(!title||!desc)return;title.textContent="أكثر أنواع البيانات طلبًا";if(rejected){desc.textContent="يعرض هذا الرسم الأسباب أو الأوصاف المرتبطة برفض الطلبات.";return}if(getSelectedFilters().status==="معلق عند مقدم الطلب"){desc.textContent="اسباب تعليق الطلب";return}desc.textContent="احصائيات نوع البيانات البيئية المطلوبة.";}
